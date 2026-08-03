@@ -1,0 +1,2340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIMP Measurement &amp; Assessment Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+  :root{
+    --pine:#1A1A1A;
+    --pine-deep:#000000;
+    --sage:#F7F5F0;
+    --sage-line:#E3DDCF;
+    --paper:#FFFFFF;
+    --gold:#A8823C;
+    --gold-soft:#EFE3C8;
+    --ink:#1A1A1A;
+    --ink-soft:#6B6558;
+    --green:#3C7A5B;
+    --green-bg:#E4EEE7;
+    --yellow:#B5860B;
+    --yellow-bg:#F6EDD3;
+    --orange:#B5651D;
+    --orange-bg:#F3E3D3;
+    --red:#A23B34;
+    --red-bg:#F2E0DD;
+    --grey:#8C8778;
+    --grey-bg:#EDEAE2;
+    --radius:10px;
+    --shadow: 0 1px 2px rgba(0,0,0,0.05), 0 6px 18px rgba(0,0,0,0.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',sans-serif;
+    background:var(--sage);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 20px 80px;}
+
+  /* ---------- Header ---------- */
+  .masthead{
+    background:var(--paper);
+    border-top:3px solid var(--ink);
+    border-bottom:1px solid var(--ink);
+    padding:22px 30px;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:24px;
+    box-shadow:var(--shadow);
+    position:relative;
+  }
+  .emblem{
+    flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .emblem img{
+    height:76px; width:auto; display:block;
+  }
+  .masthead-text{border-left:1px solid var(--sage-line); padding-left:24px;}
+  .masthead h1{
+    font-family:'Playfair Display',serif; font-weight:700; font-size:25px; margin:0 0 3px;
+    letter-spacing:0.2px; color:var(--ink);
+  }
+  .masthead p{margin:0 0 6px;font-size:13px;color:var(--ink-soft);max-width:560px;line-height:1.5;}
+  .masthead .tagline{
+    font-family:'Playfair Display',serif; font-style:italic; font-size:12.5px; color:var(--gold);
+    letter-spacing:0.03em;
+  }
+
+  /* ---------- Setup bar ---------- */
+  .setup{
+    background:var(--paper);
+    border:1px solid var(--sage-line);
+    border-radius:14px;
+    margin-top:18px;
+    padding:18px 20px;
+    display:grid;
+    grid-template-columns:repeat(4,1fr) auto;
+    gap:14px;
+    align-items:end;
+    box-shadow:var(--shadow);
+  }
+  .field label{
+    display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.06em;
+    color:var(--ink-soft); font-weight:600; margin-bottom:6px;
+  }
+  .field select, .field input{
+    width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--sage-line);
+    background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px; color:var(--ink);
+  }
+  .field select:focus, .field input:focus{outline:2px solid var(--gold); outline-offset:1px;}
+  .new-beneficiary-row{display:none; grid-column:1 / -1; gap:10px; margin-top:2px;}
+  .new-beneficiary-row.show{display:flex;}
+  .new-beneficiary-row input{flex:1;}
+  .btn{
+    border:none; border-radius:8px; padding:9px 16px; font-family:'Inter',sans-serif;
+    font-size:13px; font-weight:600; cursor:pointer; transition:transform .08s ease, opacity .15s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--pine); color:#fff;}
+  .btn-primary:hover{background:var(--pine-deep);}
+  .btn-ghost{background:transparent; color:var(--pine); border:1px solid var(--sage-line);}
+  .btn-ghost:hover{background:var(--sage);}
+  .btn-gold{background:var(--gold); color:#fff;}
+  .btn-gold:hover{opacity:.9;}
+  .btn-sm{padding:6px 11px; font-size:12px;}
+
+  /* ---------- Layout ---------- */
+  .layout{display:grid; grid-template-columns:1fr 340px; gap:20px; margin-top:20px; align-items:start;}
+  @media (max-width:900px){ .layout{grid-template-columns:1fr;} .setup{grid-template-columns:1fr 1fr;} }
+
+  /* ---------- Question groups ---------- */
+  .index-block{
+    background:var(--paper); border:1px solid var(--sage-line); border-radius:14px;
+    margin-bottom:16px; overflow:hidden; box-shadow:var(--shadow);
+  }
+  .index-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; cursor:pointer; user-select:none;
+    border-bottom:1px solid transparent;
+  }
+  .index-head.open{border-bottom-color:var(--sage-line);}
+  .index-head-left{display:flex; align-items:center; gap:12px;}
+  .index-tag{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:500;
+    padding:4px 8px; border-radius:6px; letter-spacing:0.03em;
+  }
+  .tag-ERI{background:#E4ECEA; color:var(--pine);}
+  .tag-BHI{background:var(--gold-soft); color:#7A5613;}
+  .tag-SRI{background:#DEEBE1; color:#215C3A;}
+  .index-head h2{font-family:'Playfair Display',serif; font-size:17px; font-weight:600; margin:0;}
+  .index-head .sub{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+  .index-head-right{display:flex; align-items:center; gap:14px;}
+  .index-pct{font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:500;}
+  .chevron{transition:transform .2s ease; color:var(--ink-soft);}
+  .chevron.rot{transform:rotate(180deg);}
+  .index-body{display:none; padding:6px 20px 18px;}
+  .index-body.show{display:block;}
+
+  .domain-group{margin-top:14px;}
+  .domain-title{
+    font-size:12.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase;
+    letter-spacing:0.05em; margin:0 0 8px; padding-top:10px; border-top:1px solid var(--sage-line);
+  }
+  .domain-group:first-child .domain-title{border-top:none; padding-top:0;}
+
+  .q-row{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding:9px 0;
+  }
+  .q-text{font-size:13.5px; line-height:1.4; flex:1;}
+  .q-code{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--grey); display:block; margin-top:1px;}
+  .scale{display:flex; gap:5px; flex:0 0 auto;}
+  .scale button{
+    width:30px; height:30px; border-radius:7px; border:1px solid var(--sage-line);
+    background:var(--sage); font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:500;
+    color:var(--ink-soft); cursor:pointer; transition:all .12s ease;
+  }
+  .scale button:hover{border-color:var(--gold);}
+  .scale button.sel{
+    background:var(--pine); color:#fff; border-color:var(--pine);
+  }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{position:sticky; top:20px; display:flex; flex-direction:column; gap:14px;}
+  .card{
+    background:var(--paper); border:1px solid var(--sage-line); border-radius:14px;
+    padding:18px 20px; box-shadow:var(--shadow);
+  }
+  .card h3{
+    font-family:'Playfair Display',serif; font-size:14.5px; font-weight:600; margin:0 0 12px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .progress-track{height:6px; border-radius:4px; background:var(--sage-line); overflow:hidden;}
+  .progress-fill{height:100%; background:var(--gold); border-radius:4px; transition:width .25s ease;}
+  .progress-label{font-size:11.5px; color:var(--ink-soft); margin-top:6px;}
+
+  .gauge-row{display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--sage-line);}
+  .gauge-row:last-child{border-bottom:none;}
+  .gauge-name{font-size:12.5px; font-weight:600;}
+  .gauge-name .sub{display:block; font-size:10.5px; font-weight:400; color:var(--ink-soft);}
+  .gauge-bar-wrap{flex:1; margin:0 10px; height:6px; background:var(--sage-line); border-radius:4px; overflow:hidden;}
+  .gauge-bar{height:100%; border-radius:4px; transition:width .3s ease;}
+  .gauge-val{font-family:'IBM Plex Mono',monospace; font-size:12.5px; width:44px; text-align:right;}
+
+  .chip{
+    display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700;
+    padding:4px 10px; border-radius:999px; letter-spacing:0.02em;
+  }
+  .chip::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor;}
+  .chip-green{background:var(--green-bg); color:var(--green);}
+  .chip-yellow{background:var(--yellow-bg); color:var(--yellow);}
+  .chip-orange{background:var(--orange-bg); color:var(--orange);}
+  .chip-red{background:var(--red-bg); color:var(--red);}
+  .chip-grey{background:var(--grey-bg); color:var(--grey);}
+
+  .aii-value{font-family:'Playfair Display',serif; font-size:38px; font-weight:600; line-height:1; margin:4px 0 2px;}
+  .aii-growth{font-size:12.5px; color:var(--ink-soft);}
+  .aii-growth b{color:var(--ink);}
+  .risk-line{margin-top:12px; padding-top:12px; border-top:1px solid var(--sage-line);}
+  .risk-action{font-size:12.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5;}
+
+  .card-actions{display:flex; gap:8px; flex-wrap:wrap;}
+
+  .history-item{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:8px 0; border-bottom:1px solid var(--sage-line); font-size:12.5px; cursor:pointer;
+  }
+  .history-item:last-child{border-bottom:none;}
+  .history-item:hover{background:var(--sage); margin:0 -8px; padding:8px; border-radius:6px;}
+  .history-name{font-weight:600;}
+  .history-sub{color:var(--ink-soft); font-size:11px;}
+  .empty-note{font-size:12px; color:var(--ink-soft); font-style:italic;}
+
+  /* ---------- Export modal ---------- */
+  .modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(21,42,38,0.45);
+    align-items:center; justify-content:center; z-index:50; padding:20px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{
+    background:var(--paper); border-radius:14px; padding:22px; max-width:640px; width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,0.25);
+  }
+  .modal h3{font-family:'Playfair Display',serif; margin:0 0 8px;}
+  .modal p{font-size:12.5px; color:var(--ink-soft); margin:0 0 12px; line-height:1.5;}
+  .modal textarea{
+    width:100%; height:200px; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    border:1px solid var(--sage-line); border-radius:8px; padding:10px; background:var(--sage); resize:vertical;
+  }
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:14px;}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--pine-deep); color:#fff; padding:10px 18px; border-radius:8px; font-size:13px;
+    opacity:0; transition:all .25s ease; pointer-events:none; z-index:60;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* ---------- Tabs ---------- */
+  .tabnav{
+    display:flex; gap:6px; margin-top:18px; background:var(--paper); border:1px solid var(--sage-line);
+    border-radius:12px; padding:5px; box-shadow:var(--shadow); width:fit-content;
+  }
+  .tabnav button{
+    border:none; background:transparent; padding:9px 18px; border-radius:8px; font-family:'Inter',sans-serif;
+    font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer; transition:all .15s ease;
+  }
+  .tabnav button.active{background:var(--pine); color:#fff;}
+  .tabnav button:not(.active):hover{background:var(--sage);}
+
+  /* ---------- Monitor view ---------- */
+  .kpi-row{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-top:18px;}
+  @media (max-width:900px){ .kpi-row{grid-template-columns:repeat(2,1fr);} }
+  .kpi-card{
+    background:var(--paper); border:1px solid var(--sage-line); border-radius:14px; padding:16px 18px;
+    box-shadow:var(--shadow);
+  }
+  .kpi-label{font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); font-weight:600;}
+  .kpi-value{font-family:'Playfair Display',serif; font-size:26px; font-weight:600; margin-top:6px;}
+  .kpi-sub{font-size:11.5px; color:var(--ink-soft); margin-top:4px;}
+
+  .monitor-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:18px; margin-top:18px; align-items:start;}
+  @media (max-width:980px){ .monitor-grid{grid-template-columns:1fr;} }
+
+  .chart-wrap{height:260px; position:relative;}
+  .rag-dist{display:flex; height:22px; border-radius:6px; overflow:hidden; margin-top:10px;}
+  .rag-seg{display:flex; align-items:center; justify-content:center; font-size:10.5px; color:#fff; font-weight:700;}
+  .rag-legend{display:flex; gap:14px; margin-top:10px; flex-wrap:wrap;}
+  .rag-legend-item{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft);}
+  .rag-dot{width:8px; height:8px; border-radius:50%;}
+
+  table.data-table{width:100%; border-collapse:collapse; font-size:12.5px; margin-top:8px;}
+  table.data-table th{
+    text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft);
+    padding:7px 8px; border-bottom:1px solid var(--sage-line);
+  }
+  table.data-table td{padding:8px 8px; border-bottom:1px solid var(--sage-line); vertical-align:middle;}
+  table.data-table tr:last-child td{border-bottom:none;}
+  table.data-table tfoot td{font-weight:700; border-top:1px solid var(--sage-line); border-bottom:none;}
+
+  .jr-form{display:grid; grid-template-columns:repeat(5,1fr) auto; gap:10px; align-items:end; margin-top:10px;}
+  @media (max-width:900px){ .jr-form{grid-template-columns:1fr 1fr;} }
+  .jr-form .field label{font-size:10.5px;}
+  .jr-form .field input, .jr-form .field select{padding:8px 9px; font-size:13px;}
+
+  .section-title{font-family:'Playfair Display',serif; font-size:16px; font-weight:600; margin:0 0 4px;}
+  .section-hint{font-size:12px; color:var(--ink-soft); margin:0 0 4px;}
+
+  /* ---------- Narrative report ---------- */
+  .report-section{margin-bottom:18px;}
+  .report-section-num{
+    display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px;
+    border-radius:50%; background:var(--ink); color:#fff; font-family:'IBM Plex Mono',monospace;
+    font-size:11px; margin-right:8px; flex:0 0 auto;
+  }
+  .report-section-head{display:flex; align-items:center; margin-bottom:2px;}
+  .stat-block{
+    background:var(--sage); border:1px solid var(--sage-line); border-radius:10px; padding:12px 14px;
+    margin:10px 0 12px; font-size:12.5px; line-height:1.6;
+  }
+  .stat-block table.data-table{margin-top:6px;}
+  .narrative-textarea{
+    width:100%; min-height:110px; padding:12px; border-radius:8px; border:1px solid var(--sage-line);
+    background:var(--paper); font-family:'Inter',sans-serif; font-size:13.5px; line-height:1.55; resize:vertical;
+  }
+  .narrative-textarea:focus{outline:2px solid var(--gold); outline-offset:1px;}
+  .report-meta-row{display:grid; grid-template-columns:1fr 1fr auto; gap:14px; align-items:end;}
+  @media (max-width:700px){ .report-meta-row{grid-template-columns:1fr;} }
+
+  /* ---------- Client portal / sponsors ---------- */
+  .sponsor-hint{
+    display:flex; align-items:center; gap:8px; margin-top:10px; font-size:12.5px; color:var(--ink-soft);
+  }
+  .sponsor-hint .chip{cursor:default;}
+  .sponsor-form{display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; align-items:end;}
+  .sponsor-form .field-wide{grid-column:1 / -1;}
+  @media (max-width:800px){ .sponsor-form{grid-template-columns:1fr;} }
+  .sponsor-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(260px,1fr)); gap:14px; margin-top:14px;}
+  .sponsor-card{
+    background:var(--sage); border:1px solid var(--sage-line); border-radius:10px; padding:14px 16px;
+  }
+  .sponsor-card h4{margin:0 0 2px; font-family:'Playfair Display',serif; font-size:15px; color:var(--ink);}
+  .sponsor-card .sponsor-contact{font-size:12px; color:var(--ink-soft); margin-bottom:8px;}
+  .sponsor-card .sponsor-notes{font-size:12px; color:var(--ink-soft); font-style:italic; margin-bottom:8px;}
+  .cohort-pill-row{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
+  .cohort-pill{
+    background:var(--paper); border:1px solid var(--sage-line); border-radius:20px; padding:3px 10px;
+    font-size:11.5px; color:var(--ink); display:inline-flex; align-items:center; gap:6px;
+  }
+  .cohort-pill button{
+    border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:12px; line-height:1; padding:0;
+  }
+  .cohort-pill button:hover{color:var(--red);}
+  .sponsor-card-actions{display:flex; gap:8px;}
+  .allocation-row select, .allocation-row input{
+    width:100%; padding:8px 9px; border-radius:8px; border:1px solid var(--sage-line);
+    background:var(--sage); font-family:'Inter',sans-serif; font-size:13px; color:var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="emblem"><img src="data:image/png;base64,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" alt="Angels Resource Centres logo" /></div>
+    <div class="masthead-text">
+      <h1>Measurement &amp; Assessment Tool</h1>
+      <p>Collect ERI, BHI &amp; SRI diagnostic scores per beneficiary, then monitor cohort progress, risk and economic impact over time — using the same scoring logic as the CIMP Entrepreneurial Impact Platform workbook.</p>
+      <div class="tagline">Ignite &ndash; Integrate &ndash; Impact</div>
+    </div>
+  </div>
+
+  <div class="tabnav">
+    <button id="tabBtnCollect" class="active">Collect data</button>
+    <button id="tabBtnMonitor">Monitor cohort</button>
+    <button id="tabBtnProfile">Beneficiary profile</button>
+    <button id="tabBtnPeii">Programme experience (PEII)</button>
+    <button id="tabBtnReport">Narrative report</button>
+    <button id="tabBtnSponsors">Client portal</button>
+  </div>
+
+  <div id="view-collect">
+
+  <div class="setup" id="setupBar">
+    <div class="field">
+      <label for="programmeInput">Programme</label>
+      <input id="programmeInput" type="text" value="Scatec" />
+    </div>
+    <div class="field">
+      <label for="cohortInput">Cohort</label>
+      <input id="cohortInput" type="text" value="Cohort 1" />
+    </div>
+    <div class="field">
+      <label for="beneficiarySelect">Beneficiary</label>
+      <select id="beneficiarySelect"></select>
+    </div>
+    <div class="field">
+      <label for="periodSelect">Period</label>
+      <select id="periodSelect">
+        <option>Baseline</option>
+        <option>Q1</option>
+        <option>Q2</option>
+        <option>Q3</option>
+        <option>Q4</option>
+        <option>Endline</option>
+      </select>
+    </div>
+    <button class="btn btn-ghost" id="addBeneficiaryBtn">+ New beneficiary</button>
+
+    <div class="new-beneficiary-row" id="newBeneficiaryRow">
+      <input type="text" id="newBeneficiaryInput" placeholder="Full name of new beneficiary" />
+      <button class="btn btn-primary btn-sm" id="confirmNewBeneficiary">Add</button>
+      <button class="btn btn-ghost btn-sm" id="cancelNewBeneficiary">Cancel</button>
+    </div>
+  </div>
+
+  <div class="sponsor-hint" id="sponsorHint"></div>
+
+  <div class="layout">
+    <div class="main">
+      <div class="card" id="seededBanner" style="display:none; border-color:var(--gold); background:var(--gold-soft); font-size:12.5px; color:#7A5613; padding:12px 16px; margin-bottom:14px;"></div>
+      <div id="questionArea"></div>
+    </div>
+
+    <div class="sidebar">
+      <div class="card">
+        <h3>Completion</h3>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="progress-label" id="progressLabel">0 of 67 items scored</div>
+      </div>
+
+      <div class="card">
+        <h3>Diagnostic Indices</h3>
+        <div id="gaugeArea"></div>
+      </div>
+
+      <div class="card">
+        <h3>Aggregate Impact Index</h3>
+        <div class="aii-value" id="aiiValue">—</div>
+        <div class="aii-growth" id="aiiGrowth">No baseline on record yet</div>
+        <div class="risk-line">
+          <div id="riskChip"><span class="chip chip-grey">Awaiting scores</span></div>
+          <div class="risk-action" id="riskAction"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Actions</h3>
+        <div class="card-actions">
+          <button class="btn btn-primary btn-sm" id="saveBtn">Save assessment</button>
+          <button class="btn btn-gold btn-sm" id="exportBtn">Export for Survey_Data</button>
+          <button class="btn btn-ghost btn-sm" id="clearBtn">Clear scores</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Saved assessments</h3>
+        <div id="historyArea"><div class="empty-note">Nothing saved yet in this browser.</div></div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /view-collect -->
+
+  <div id="view-monitor" style="display:none">
+
+    <div style="display:flex; justify-content:flex-end; margin-bottom:4px;">
+      <button class="btn btn-gold btn-sm" id="loadSeedBtn">Load historical data (Annexure I &amp; II)</button>
+    </div>
+
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="monitor-grid">
+      <div class="card">
+        <div class="section-title">Diagnostic trend by period</div>
+        <p class="section-hint">Cohort-average ERI, BHI, SRI and AII across every saved period.</p>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">RAG distribution — latest period</div>
+        <p class="section-hint" id="ragPeriodLabel">No assessments saved yet.</p>
+        <div class="rag-dist" id="ragDist"></div>
+        <div class="rag-legend">
+          <div class="rag-legend-item"><span class="rag-dot" style="background:var(--green)"></span>Green (≥80%)</div>
+          <div class="rag-legend-item"><span class="rag-dot" style="background:var(--yellow)"></span>Yellow (≥60%)</div>
+          <div class="rag-legend-item"><span class="rag-dot" style="background:var(--orange)"></span>Orange (≥40%)</div>
+          <div class="rag-legend-item"><span class="rag-dot" style="background:var(--red)"></span>Red (&lt;40%)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="section-title">Risk report</div>
+      <p class="section-hint">Each beneficiary's most recently saved assessment, with growth measured against their baseline.</p>
+      <table class="data-table" id="riskTable">
+        <thead>
+          <tr><th>Beneficiary</th><th>Latest period</th><th>AII %</th><th>Growth vs baseline</th><th>Risk flag</th><th>Recommended action</th></tr>
+        </thead>
+        <tbody id="riskTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="section-title">Jobs &amp; revenue tracker</div>
+      <p class="section-hint">Log spend, revenue and employment supported each period — mirrors the workbook's Jobs &amp; Revenue sheet.</p>
+      <div class="jr-form">
+        <div class="field">
+          <label for="jrPeriod">Period</label>
+          <select id="jrPeriod">
+            <option>Baseline</option><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option><option>Endline</option>
+          </select>
+        </div>
+        <div class="field"><label for="jrSpend">Spend (R)</label><input id="jrSpend" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label for="jrRevenue">Revenue (R)</label><input id="jrRevenue" type="number" min="0" step="0.01" /></div>
+        <div class="field"><label for="jrFT">Full-time jobs</label><input id="jrFT" type="number" min="0" step="1" /></div>
+        <div class="field"><label for="jrPT">Seasonal/part-time</label><input id="jrPT" type="number" min="0" step="1" /></div>
+        <button class="btn btn-primary btn-sm" id="jrSaveBtn">Log period</button>
+      </div>
+      <table class="data-table" id="jrTable">
+        <thead><tr><th>Period</th><th>Spend</th><th>Revenue</th><th>Leverage</th><th>Full-time</th><th>Seasonal/PT</th><th></th></tr></thead>
+        <tbody id="jrTableBody"></tbody>
+        <tfoot><tr id="jrTotalsRow"></tr></tfoot>
+      </table>
+    </div>
+
+  </div><!-- /view-monitor -->
+
+  <div id="view-profile" style="display:none">
+    <div class="setup" style="grid-template-columns:1fr auto;">
+      <div class="field">
+        <label for="profileBeneficiarySelect">Beneficiary</label>
+        <select id="profileBeneficiarySelect"></select>
+      </div>
+    </div>
+
+    <div class="kpi-row" id="profileKpiRow" style="margin-top:16px;"></div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="section-title">Diagnostic trend</div>
+      <p class="section-hint">This beneficiary's ERI, BHI, SRI and AII across every saved period.</p>
+      <div class="chart-wrap"><canvas id="profileChart"></canvas></div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="section-title">Period-by-period history</div>
+      <table class="data-table" id="profileTable">
+        <thead><tr><th>Period</th><th>ERI</th><th>BHI</th><th>SRI</th><th>AII</th><th>RAG</th><th>Growth</th><th>Risk</th><th>Recommended action</th></tr></thead>
+        <tbody id="profileTableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="section-title">Programme experience (PEII) history</div>
+      <table class="data-table" id="profilePeiiTable">
+        <thead><tr><th>Quarter</th><th>PEII %</th><th>Rating</th><th>Feedback</th></tr></thead>
+        <tbody id="profilePeiiTableBody"></tbody>
+      </table>
+    </div>
+  </div><!-- /view-profile -->
+
+  <div id="view-peii" style="display:none">
+    <div class="setup" id="peiiSetupBar">
+      <div class="field">
+        <label for="peiiBeneficiarySelect">Beneficiary</label>
+        <select id="peiiBeneficiarySelect"></select>
+      </div>
+      <div class="field">
+        <label for="peiiQuarterSelect">Quarter</label>
+        <select id="peiiQuarterSelect">
+          <option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="layout" style="margin-top:18px;">
+      <div class="main">
+        <div class="card" id="peiiSeededBanner" style="display:none; border-color:var(--gold); background:var(--gold-soft); font-size:12.5px; color:#7A5613; padding:12px 16px; margin-bottom:14px;"></div>
+        <div class="card">
+          <div class="section-title">Workshop rating</div>
+          <p class="section-hint">Rate each dimension from 1 (strongly disagree) to 5 (strongly agree).</p>
+          <div id="peiiDimArea"></div>
+          <div style="margin-top:16px;">
+            <label style="display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:600; margin-bottom:6px;">Qualitative feedback</label>
+            <textarea id="peiiFeedback" rows="3" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--sage-line); background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px;" placeholder="Any comments from the beneficiary about this quarter's programme experience..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <div class="card">
+          <h3>This quarter</h3>
+          <div class="aii-value" id="peiiValue">—</div>
+          <div id="peiiRatingChip"><span class="chip chip-grey">Awaiting scores</span></div>
+          <div class="card-actions" style="margin-top:14px;">
+            <button class="btn btn-primary btn-sm" id="peiiSaveBtn">Save PEII</button>
+            <button class="btn btn-ghost btn-sm" id="peiiClearBtn">Clear</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Cohort PEII summary</h3>
+          <table class="data-table" id="peiiSummaryTable">
+            <thead><tr><th>Beneficiary</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Overall</th></tr></thead>
+            <tbody id="peiiSummaryTableBody"></tbody>
+            <tfoot><tr id="peiiSummaryTotalsRow"></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div><!-- /view-peii -->
+
+  <div id="view-report" style="display:none">
+    <div class="setup report-meta-row" id="reportSetupBar">
+      <div class="field">
+        <label for="reportBeneficiarySelect">Beneficiary</label>
+        <select id="reportBeneficiarySelect"></select>
+      </div>
+      <div class="field">
+        <label for="reportAssessorInput">Assessor name</label>
+        <input id="reportAssessorInput" type="text" placeholder="Your name" />
+      </div>
+      <button class="btn btn-gold btn-sm" id="reportPrintBtn">Print / export report</button>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+
+      <div class="report-section">
+        <div class="report-section-head"><span class="report-section-num">1</span><span class="section-title">Beneficiary overview</span></div>
+        <div class="stat-block" id="statOverview"></div>
+        <textarea class="narrative-textarea" id="narrOverview" placeholder="Describe the beneficiary's business, context and background relevant to this reporting period..."></textarea>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-head"><span class="report-section-num">2</span><span class="section-title">Diagnostic assessment findings</span></div>
+        <div class="stat-block" id="statDiagnostic"></div>
+        <textarea class="narrative-textarea" id="narrDiagnostic" placeholder="Comment on the ERI, BHI and SRI results — what is driving strong or weak performance in each area..."></textarea>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-head"><span class="report-section-num">3</span><span class="section-title">Growth, risk &amp; recommended action</span></div>
+        <div class="stat-block" id="statGrowth"></div>
+        <textarea class="narrative-textarea" id="narrGrowth" placeholder="Explain the growth trajectory and risk flag, and what action is planned or already underway..."></textarea>
+      </div>
+
+      <div class="report-section">
+        <div class="report-section-head"><span class="report-section-num">4</span><span class="section-title">Programme experience (PEII)</span></div>
+        <div class="stat-block" id="statPeii"></div>
+        <textarea class="narrative-textarea" id="narrPeii" placeholder="Reflect on the beneficiary's engagement with mentorship, workshops and programme support..."></textarea>
+      </div>
+
+      <div class="report-section" style="margin-bottom:4px;">
+        <div class="report-section-head"><span class="report-section-num">5</span><span class="section-title">Overall conclusion &amp; recommendations</span></div>
+        <textarea class="narrative-textarea" id="narrOverall" placeholder="Summarise overall progress and set out recommendations for the next reporting period..."></textarea>
+      </div>
+
+      <div class="card-actions" style="margin-top:16px;">
+        <button class="btn btn-primary btn-sm" id="reportSaveBtn">Save report</button>
+        <span class="section-hint" id="reportSavedNote" style="margin:0;"></span>
+      </div>
+    </div>
+  </div><!-- /view-report -->
+
+  <div id="view-sponsors" style="display:none">
+
+    <div class="card">
+      <div class="section-title">Sponsor clients</div>
+      <p class="section-hint">External organisations that fund or sponsor a cohort. Add a sponsor here, then allocate one or more cohorts to them below.</p>
+
+      <div class="sponsor-form">
+        <div class="field">
+          <label for="sponsorNameInput">Organisation name</label>
+          <input type="text" id="sponsorNameInput" placeholder="e.g. Scatec Foundation" />
+        </div>
+        <div class="field">
+          <label for="sponsorContactInput">Contact person</label>
+          <input type="text" id="sponsorContactInput" placeholder="e.g. Jane Dlamini" />
+        </div>
+        <div class="field">
+          <label for="sponsorEmailInput">Contact email</label>
+          <input type="email" id="sponsorEmailInput" placeholder="e.g. jane@sponsor.org" />
+        </div>
+        <div class="field field-wide">
+          <label for="sponsorNotesInput">Notes (optional)</label>
+          <input type="text" id="sponsorNotesInput" placeholder="Funding terms, reporting cadence, etc." />
+        </div>
+        <div>
+          <button class="btn btn-primary btn-sm" id="addSponsorBtn">+ Add sponsor</button>
+        </div>
+      </div>
+
+      <div class="sponsor-grid" id="sponsorGrid">
+        <div class="empty-note">No sponsor clients added yet.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title">Allocate a cohort to a sponsor</div>
+      <p class="section-hint">Assign a Programme + Cohort combination to one of the sponsor clients above. Pick from cohorts already used in Collect data, or type a new one.</p>
+
+      <div class="sponsor-form allocation-row">
+        <div class="field">
+          <label for="allocProgrammeInput">Programme</label>
+          <input type="text" id="allocProgrammeInput" list="knownProgrammes" placeholder="e.g. Scatec" />
+          <datalist id="knownProgrammes"></datalist>
+        </div>
+        <div class="field">
+          <label for="allocCohortInput">Cohort</label>
+          <input type="text" id="allocCohortInput" list="knownCohorts" placeholder="e.g. Cohort 1" />
+          <datalist id="knownCohorts"></datalist>
+        </div>
+        <div class="field">
+          <label for="allocSponsorSelect">Sponsor</label>
+          <select id="allocSponsorSelect"><option value="">— Select a sponsor —</option></select>
+        </div>
+        <div>
+          <button class="btn btn-gold btn-sm" id="allocateCohortBtn">Allocate</button>
+        </div>
+      </div>
+
+      <table class="data-table" id="allocationTable" style="margin-top:16px;">
+        <thead><tr><th>Programme</th><th>Cohort</th><th>Sponsor</th><th></th></tr></thead>
+        <tbody><tr><td colspan="4" class="empty-note">No cohorts allocated yet.</td></tr></tbody>
+      </table>
+    </div>
+
+  </div><!-- /view-sponsors -->
+
+</div>
+
+<div class="modal-backdrop" id="exportModal">
+  <div class="modal">
+    <h3>Export scores</h3>
+    <p>Tab-separated rows in the same column order as <b>Survey_Data</b> (Programme, Cohort, Period, Beneficiary, Question Code, Score). Copy and paste directly under the last row of that sheet.</p>
+    <textarea id="exportText" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" id="closeExportBtn">Close</button>
+      <button class="btn btn-primary btn-sm" id="copyExportBtn">Copy to clipboard</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================ DATA ============================ */
+
+const QUESTION_LIBRARY = {
+  ERI: {
+    label: "Entrepreneur Readiness Index",
+    weight: 0.3,
+    domains: {
+      "Entrepreneurial Mindset": [
+        ["ERI_MIND1","Shows confidence in their ability to grow the business"],
+        ["ERI_MIND2","Takes initiative to solve problems without being told"],
+        ["ERI_MIND3","Views setbacks as learning opportunities"],
+        ["ERI_MIND4","Sets personal goals for the business"],
+        ["ERI_MIND5","Stays motivated to keep improving the business"],
+      ],
+      "Business Knowledge": [
+        ["ERI_KNOW1","Understands the products/services and how they meet customer needs"],
+        ["ERI_KNOW2","Understands who competitors are and how the business differs"],
+        ["ERI_KNOW3","Can explain the business's value proposition clearly"],
+        ["ERI_KNOW4","Understands basic costing and pricing"],
+        ["ERI_KNOW5","Knows the key steps needed to grow the business"],
+      ],
+      "Financial Literacy": [
+        ["ERI_FIN1","Understands the difference between profit and revenue"],
+        ["ERI_FIN2","Can calculate a simple break-even point"],
+        ["ERI_FIN3","Understands the importance of saving and reinvesting profit"],
+        ["ERI_FIN4","Understands basic cash flow management"],
+        ["ERI_FIN5","Can read and interpret a simple financial statement"],
+      ],
+      "Compliance & Governance": [
+        ["ERI_COMP1","Business is registered with the relevant authorities"],
+        ["ERI_COMP2","Understands tax obligations and filing requirements"],
+        ["ERI_COMP3","Keeps basic records of income and expenses"],
+        ["ERI_COMP4","Aware of licences/permits required to operate legally"],
+        ["ERI_COMP5","Has basic agreements or policies in place (e.g. supplier terms)"],
+      ],
+      "Planning & Growth": [
+        ["ERI_PLAN1","Has a basic business plan or set of growth goals"],
+        ["ERI_PLAN2","Sets short-term targets (e.g. quarterly)"],
+        ["ERI_PLAN3","Reviews progress against targets regularly"],
+        ["ERI_PLAN4","Has identified opportunities to expand the business"],
+        ["ERI_PLAN5","Has a plan to manage risks to the business"],
+      ],
+      "Digital Readiness": [
+        ["ERI_DIG1","Comfortable using a smartphone/computer for business tasks"],
+        ["ERI_DIG2","Uses digital tools to communicate with customers"],
+        ["ERI_DIG3","Uses digital tools for record-keeping or invoicing"],
+        ["ERI_DIG4","Aware of online platforms to reach new customers"],
+        ["ERI_DIG5","Confident using mobile money or digital payment tools"],
+      ],
+    }
+  },
+  BHI: {
+    label: "Business Health Index",
+    weight: 0.4,
+    domains: {
+      "Revenue & Profitability": [
+        ["BHI_REV1","Business generates consistent monthly revenue"],
+        ["BHI_REV2","Business is currently profitable"],
+        ["BHI_REV4","Revenue has grown compared to the previous period"],
+      ],
+      "Customers & Market Access": [
+        ["BHI_CUS1","Has a clear understanding of who the target customers are"],
+        ["BHI_CUS2","Regularly gathers feedback from customers"],
+        ["BHI_MKT1","Has access to a stable base of paying customers"],
+        ["BHI_MKT2","Actively works to attract new customers or markets"],
+      ],
+      "Financial Management": [
+        ["BHI_FIN1","Keeps separate records for business and personal finances"],
+        ["BHI_MGT1","Maintains up-to-date financial records"],
+        ["BHI_MGT2","Reviews financial performance on a regular basis"],
+        ["BHI_MGT3","Has adequate working capital to run daily operations"],
+        ["BHI_MGT4","Manages debt and credit responsibly"],
+        ["BHI_MGT5","Has a system for managing stock/inventory"],
+      ],
+      "Operations": [
+        ["BHI_OPS1","Has reliable systems/processes to deliver products or services"],
+        ["BHI_OPS2","Manages suppliers effectively"],
+        ["BHI_OPS3","Maintains consistent product/service quality"],
+        ["BHI_OPS4","Has adequate equipment/tools to operate efficiently"],
+        ["BHI_OPS5","Has a plan to manage operational disruptions"],
+      ],
+      "Employment & Local Impact": [
+        ["BHI_EMP1","Business currently employs staff (full-time or part-time)"],
+        ["BHI_EMP3","Business sources goods/services locally where possible"],
+      ],
+    }
+  },
+  SRI: {
+    label: "Sustainability & Resilience Index",
+    weight: 0.3,
+    domains: {
+      "Financial Sustainability": [
+        ["SRI_RES1","Has some financial reserves/savings for the business"],
+        ["SRI_RES2","Business could survive a moderate financial shock"],
+        ["SRI_SUS1","Not overly dependent on a single customer or contract"],
+        ["SRI_SUS2","Has diversified income streams where possible"],
+        ["SRI_SUS3","Reinvests profit back into the business"],
+      ],
+      "Growth Sustainability": [
+        ["SRI_GROW1","Business has potential to grow beyond its current scale"],
+        ["SRI_GROW5","Has a strategy to sustain growth after programme support ends"],
+      ],
+      "Leadership Sustainability": [
+        ["SRI_LEAD4","Has someone able to run the business if the owner is unavailable"],
+        ["SRI_LEAD5","Actively develops leadership/management skills"],
+      ],
+      "Operational Sustainability": [
+        ["SRI_OPS5","Business systems can keep operating without ongoing external support"],
+      ],
+      "Environmental Sustainability": [
+        ["SRI_ENV1","Business considers environmental impact in its operations"],
+        ["SRI_ENV3","Uses resources (water, energy, materials) efficiently"],
+      ],
+      "Social Sustainability": [
+        ["SRI_SOC1","Business contributes positively to the local community"],
+        ["SRI_SOC2","Maintains good relationships with community stakeholders"],
+        ["SRI_SOC3","Provides fair treatment/conditions for employees"],
+        ["SRI_SOC4","Considers succession/continuity beyond the current owner"],
+        ["SRI_SOC5","Business has a positive reputation locally"],
+      ],
+    }
+  },
+};
+
+const DEFAULT_BENEFICIARIES = [
+  "Ronelda Pofadder","Marlon Daniels","Marynna Fielies","Elrico de Bruin",
+  "Charlene Papier","Nicole Boer","Kaythlin Rooi","Limonta Williams","Maxwill Pietera"
+];
+
+const PEII_DIMENSIONS = [
+  ["design","Programme Design","The structure and content of the programme met my needs"],
+  ["mentorship","Mentorship & Support","Mentors were accessible, knowledgeable and supportive"],
+  ["admin","Administration & Communication","Scheduling, payments and communication ran smoothly"],
+  ["practical","Practical Application","Tools and training were practical and usable in my business"],
+  ["overall","Overall Programme Experience","Overall, the programme was a positive experience"],
+];
+
+function ratingForPEII(pct){
+  if(pct === null || pct === undefined) return "No Data";
+  if(pct >= 90) return "Excellent";
+  if(pct >= 80) return "Very Good";
+  if(pct >= 60) return "Good";
+  return "Needs Improvement";
+}
+const PEII_RATING_CLS = {
+  "Excellent":"chip-green","Very Good":"chip-green","Good":"chip-yellow",
+  "Needs Improvement":"chip-red","No Data":"chip-grey"
+};
+
+function peiiPctForRecord(record){
+  if(record.computedPct !== undefined && record.computedPct !== null) return record.computedPct;
+  const vals = PEII_DIMENSIONS.map(([key]) => record.dims ? record.dims[key] : undefined).filter(v => v !== undefined);
+  if(vals.length === 0) return null;
+  return vals.reduce((a,b)=>a+b,0) / vals.length / 5 * 100;
+}
+
+
+const RECOMMENDED_ACTION = {
+  "High": "Immediate mentor intervention and management review",
+  "Declining": "Investigate drop against baseline",
+  "Medium": "Targeted support plan",
+  "Watch": "Monitor in next quarter",
+  "Low": "Maintain support",
+  "No Data": "Await further data before assigning an action",
+};
+
+// Historical figures imported from Annexure I (diagnostic index summary) and
+// Annexure II (PEII summary). These seed the tool with real Baseline→Q3 / Q1→Q4
+// history for the original Scatec Cohort 1 so Monitor & Profile aren't empty.
+const SEED_DIAGNOSTIC = {
+  "Ronelda Pofadder": { Baseline:[61.5,51.4,65.0], Q1:[87.6,88.0,94.0], Q2:[88.7,88.0,94.0], Q3:[84.0,78.7,82.0] },
+  "Marlon Daniels":   { Baseline:[81.5,80.0,80.0], Q1:[77.9,82.7,82.0], Q2:[90.0,89.3,92.0], Q3:[94.0,94.7,94.0] },
+  "Marynna Fielies":  { Baseline:[89.2,91.4,87.5], Q1:[89.7,96.0,94.0], Q2:[94.0,96.0,98.0], Q3:[98.0,97.3,100.0] },
+  "Elrico de Bruin":  { Baseline:[81.5,77.1,85.0], Q1:[77.2,81.3,84.0], Q2:[90.0,92.0,96.0], Q3:[97.3,97.3,98.0] },
+  "Charlene Papier":  { Baseline:[70.8,60.0,72.5], Q1:[69.7,70.7,74.0], Q2:[88.0,90.7,94.0], Q3:[91.3,93.3,100.0] },
+  "Nicole Boer":      { Baseline:[83.1,80.0,80.0], Q1:[78.6,82.7,82.0], Q2:[90.7,96.0,98.0], Q3:[97.3,97.3,100.0] },
+  "Kaythlin Rooi":    { Baseline:[89.2,80.0,82.5], Q1:[89.7,86.7,90.0], Q2:[90.0,92.0,98.0], Q3:[92.7,94.7,100.0] },
+  "Limonta Williams": { Baseline:[69.2,57.1,75.0], Q1:[68.3,65.3,74.0], Q2:[90.0,92.0,98.0], Q3:[93.3,94.7,100.0] },
+  "Maxwill Pietera":  { Baseline:[49.2,28.6,48.6], Q1:[48.3,40.0,48.0], Q2:[89.3,89.3,94.0], Q3:[91.3,87.5,null] },
+};
+// each array is [ERI%, BHI%, SRI%] — null means "No Data" for that index in that period
+
+const SEED_PEII = {
+  "Ronelda Pofadder": [
+    ["Q1",92.5,"Strong support from the Angels team; administration was mostly smooth."],
+    ["Q2",80.0,"Mentorship is helpful; communication can be more structured."],
+    ["Q3",95.0,"Keep mentor check-ins; add more market access examples."],
+    ["Q4",96.0,"Programme pathway was clear; mentorship and practical tools strengthened the business."],
+  ],
+  "Marlon Daniels": [
+    ["Q1",74.5,"Good progress, but processing delays caused uncertainty."],
+    ["Q2",68.0,"Administration and logistics need quicker turnaround."],
+    ["Q3",75.0,"Keep practical training; improve administration reminders."],
+    ["Q4",80.0,"Positive end-of-programme experience; continued business support needed."],
+  ],
+  "Marynna Fielies": [
+    ["Q1",89.5,"Programme is meeting expectations and building confidence."],
+    ["Q2",88.0,"Overall value is strong; communication is clear."],
+    ["Q3",95.0,"Mentorship and programme structure work well; add peer sharing."],
+    ["Q4",100.0,"Programme exceeded expectations with strong confidence growth and business improvement."],
+  ],
+  "Elrico de Bruin": [
+    ["Q1",70.0,"Mentorship was useful but needs more frequent follow-up."],
+    ["Q2",68.0,"Progress is visible but communication needs improvement."],
+    ["Q3",75.0,"Maintain programme flow and strengthen administration systems."],
+    ["Q4",76.0,"Mentorship helped, but additional market access support is needed."],
+  ],
+  "Charlene Papier": [
+    ["Q1",94.5,"Very positive experience; feels well supported."],
+    ["Q2",92.0,"Mentorship and communication are strong."],
+    ["Q3",100.0,"Keep current mentorship model; introduce advanced business tools."],
+    ["Q4",100.0,"Excellent overall journey; mentorship and practical application were key strengths."],
+  ],
+  "Nicole Boer": [
+    ["Q1",80.0,"Good steady support; expectations were largely met."],
+    ["Q2",76.0,"Programme value is good; logistics communication could improve."],
+    ["Q3",80.0,"Maintain practical sessions and improve scheduling communication."],
+    ["Q4",84.0,"Practical training helped improve business systems."],
+  ],
+  "Kaythlin Rooi": [
+    ["Q1",84.5,"Mentorship stands out as a key strength."],
+    ["Q2",80.0,"Payments and logistics should be improved."],
+    ["Q3",90.0,"Maintain mentor support and provide more finance guidance."],
+    ["Q4",92.0,"Strong final experience; additional finance and customer growth support would add value."],
+  ],
+  "Limonta Williams": [
+    ["Q1",70.0,"Programme is helpful, but greater clarity is needed."],
+    ["Q2",68.0,"Mixed experience due to administration and communication gaps."],
+    ["Q3",70.0,"Improve programme structure and reminders while maintaining mentor access."],
+    ["Q4",72.0,"Positive journey overall, though practical application and business impact require more time."],
+  ],
+  "Maxwill Pietera": [
+    ["Q1",95.0,"Strong programme value and responsive administration support."],
+    ["Q2",88.0,"Administration works well and overall programme value is high."],
+    ["Q3",95.0,"Maintain administration efficiency; provide more customer growth support."],
+    ["Q4",96.0,"High programme value; business is stronger and confidence has improved significantly."],
+  ],
+};
+
+/* ============================ STATE ============================ */
+
+let scores = {};             // { QUESTION_CODE: 1-5 }
+let currentBeneficiary = null;
+let currentPeriod = "Baseline";
+let baselineAIICache = null; // {aii} for currently selected beneficiary
+
+const TOTAL_QUESTIONS = Object.values(QUESTION_LIBRARY)
+  .reduce((sum, idx) => sum + Object.values(idx.domains).reduce((s,arr)=>s+arr.length,0), 0);
+
+/* ============================ RENDER: QUESTIONS ============================ */
+
+function buildQuestionArea(){
+  const area = document.getElementById('questionArea');
+  area.innerHTML = '';
+  Object.entries(QUESTION_LIBRARY).forEach(([key, idx]) => {
+    const block = document.createElement('div');
+    block.className = 'index-block';
+    block.innerHTML = `
+      <div class="index-head" data-idx="${key}">
+        <div class="index-head-left">
+          <span class="index-tag tag-${key}">${key}</span>
+          <div>
+            <h2>${idx.label}</h2>
+            <div class="sub">${Object.values(idx.domains).reduce((s,a)=>s+a.length,0)} items · weight ${(idx.weight*100).toFixed(0)}%</div>
+          </div>
+        </div>
+        <div class="index-head-right">
+          <span class="index-pct" id="pct-${key}">—</span>
+          <svg class="chevron" id="chev-${key}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+      </div>
+      <div class="index-body" id="body-${key}"></div>
+    `;
+    area.appendChild(block);
+
+    const body = block.querySelector(`#body-${key}`);
+    Object.entries(idx.domains).forEach(([domainName, items]) => {
+      const dg = document.createElement('div');
+      dg.className = 'domain-group';
+      dg.innerHTML = `<div class="domain-title">${domainName}</div>`;
+      items.forEach(([code, text]) => {
+        const row = document.createElement('div');
+        row.className = 'q-row';
+        row.innerHTML = `
+          <div>
+            <div class="q-text">${text}</div>
+            <span class="q-code">${code}</span>
+          </div>
+          <div class="scale" data-code="${code}">
+            ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}">${v}</button>`).join('')}
+          </div>
+        `;
+        dg.appendChild(row);
+      });
+      body.appendChild(dg);
+    });
+
+    block.querySelector('.index-head').addEventListener('click', () => toggleIndex(key));
+  });
+
+  area.addEventListener('click', (e) => {
+    const btn = e.target.closest('.scale button');
+    if(!btn) return;
+    const code = btn.parentElement.getAttribute('data-code');
+    const val = parseInt(btn.getAttribute('data-val'), 10);
+    if(scores[code] === val){
+      delete scores[code]; // toggle off
+    } else {
+      scores[code] = val;
+    }
+    refreshScaleUI(code);
+    recompute();
+  });
+
+  // open ERI by default
+  toggleIndex('ERI', true);
+}
+
+function toggleIndex(key, forceOpen){
+  const body = document.getElementById(`body-${key}`);
+  const head = document.querySelector(`.index-head[data-idx="${key}"]`);
+  const chev = document.getElementById(`chev-${key}`);
+  const willOpen = forceOpen === true ? true : !body.classList.contains('show');
+  body.classList.toggle('show', willOpen);
+  head.classList.toggle('open', willOpen);
+  chev.classList.toggle('rot', willOpen);
+}
+
+function refreshScaleUI(code){
+  const wrap = document.querySelector(`.scale[data-code="${code}"]`);
+  if(!wrap) return;
+  wrap.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('sel', parseInt(b.getAttribute('data-val'),10) === scores[code]);
+  });
+}
+
+function refreshAllScaleUI(){
+  document.querySelectorAll('.scale').forEach(wrap => {
+    const code = wrap.getAttribute('data-code');
+    wrap.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('sel', parseInt(b.getAttribute('data-val'),10) === scores[code]);
+    });
+  });
+}
+
+/* ============================ SCORING ============================ */
+
+function indexCodes(key){
+  return Object.values(QUESTION_LIBRARY[key].domains).flat().map(q => q[0]);
+}
+
+function computeIndexPct(key){
+  const codes = indexCodes(key);
+  const vals = codes.map(c => scores[c]).filter(v => v !== undefined);
+  if(vals.length === 0) return null;
+  const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
+  return { pct: avg/5*100, answered: vals.length, total: codes.length };
+}
+
+function ragFor(pct){
+  if(pct === null || pct === undefined) return {label:"No Data", cls:"chip-grey"};
+  if(pct >= 80) return {label:"Green", cls:"chip-green"};
+  if(pct >= 60) return {label:"Yellow", cls:"chip-yellow"};
+  if(pct >= 40) return {label:"Orange", cls:"chip-orange"};
+  return {label:"Red", cls:"chip-red"};
+}
+
+function computeAII(eri, bhi, sri){
+  const present = [eri, bhi, sri].filter(v => v !== null);
+  if(present.length === 0) return null;
+  if(eri !== null && bhi !== null && sri !== null){
+    return eri.pct*0.3 + bhi.pct*0.4 + sri.pct*0.3;
+  }
+  const vals = [eri,bhi,sri].filter(v=>v!==null).map(v=>v.pct);
+  return vals.reduce((a,b)=>a+b,0)/vals.length;
+}
+
+function riskFlagFor(aii, growth){
+  if(aii === null) return "No Data";
+  if(aii < 40) return "High";
+  if(growth !== null && growth < -10) return "Declining";
+  if(aii < 60) return "Medium";
+  if(aii < 80) return "Watch";
+  return "Low";
+}
+
+function barColor(pct){
+  if(pct === null) return 'var(--grey)';
+  if(pct >= 80) return 'var(--green)';
+  if(pct >= 60) return 'var(--yellow)';
+  if(pct >= 40) return 'var(--orange)';
+  return 'var(--red)';
+}
+
+/* ============================ RECOMPUTE / RENDER SUMMARY ============================ */
+
+function recompute(){
+  const eri = computeIndexPct('ERI');
+  const bhi = computeIndexPct('BHI');
+  const sri = computeIndexPct('SRI');
+  const aii = computeAII(eri, bhi, sri);
+
+  // header pct per block
+  ['ERI','BHI','SRI'].forEach(k => {
+    const val = k==='ERI'?eri:(k==='BHI'?bhi:sri);
+    document.getElementById(`pct-${k}`).textContent = val ? `${val.pct.toFixed(1)}%` : '—';
+  });
+
+  // progress
+  const answered = Object.keys(scores).length;
+  document.getElementById('progressFill').style.width = `${(answered/TOTAL_QUESTIONS*100).toFixed(1)}%`;
+  document.getElementById('progressLabel').textContent = `${answered} of ${TOTAL_QUESTIONS} items scored`;
+
+  // gauges
+  const gaugeArea = document.getElementById('gaugeArea');
+  gaugeArea.innerHTML = ['ERI','BHI','SRI'].map(k => {
+    const val = k==='ERI'?eri:(k==='BHI'?bhi:sri);
+    const pct = val ? val.pct : null;
+    const rag = ragFor(pct);
+    return `
+      <div class="gauge-row">
+        <div class="gauge-name">${k}<span class="sub">${QUESTION_LIBRARY[k].label}</span></div>
+        <div class="gauge-bar-wrap"><div class="gauge-bar" style="width:${pct?pct.toFixed(1):0}%; background:${barColor(pct)}"></div></div>
+        <div class="gauge-val">${pct? pct.toFixed(0)+'%' : '—'}</div>
+      </div>`;
+  }).join('') + `
+      <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+        ${['ERI','BHI','SRI'].map(k=>{
+          const val = k==='ERI'?eri:(k==='BHI'?bhi:sri);
+          const rag = ragFor(val?val.pct:null);
+          return `<span class="chip ${rag.cls}">${k} · ${rag.label}</span>`;
+        }).join('')}
+      </div>`;
+
+  // AII + growth + risk
+  const baselinePct = baselineAIICache;
+  const growth = (aii !== null && baselinePct !== null && currentPeriod !== 'Baseline') ? (aii - baselinePct) : null;
+  document.getElementById('aiiValue').textContent = aii !== null ? `${aii.toFixed(1)}%` : '—';
+
+  const growthEl = document.getElementById('aiiGrowth');
+  if(currentPeriod === 'Baseline'){
+    growthEl.innerHTML = aii !== null ? `This will be saved as the <b>baseline</b> reference.` : `No baseline on record yet.`;
+  } else if(baselinePct === null){
+    growthEl.innerHTML = `No saved baseline for this beneficiary yet — save a Baseline assessment to track growth.`;
+  } else if(growth !== null){
+    const sign = growth >= 0 ? '+' : '';
+    growthEl.innerHTML = `<b>${sign}${growth.toFixed(1)} pp</b> vs baseline (${baselinePct.toFixed(1)}%)`;
+  } else {
+    growthEl.innerHTML = `Baseline on record: <b>${baselinePct.toFixed(1)}%</b>`;
+  }
+
+  const flag = riskFlagFor(aii, growth);
+  const flagCls = {
+    "High":"chip-red","Declining":"chip-orange","Medium":"chip-orange",
+    "Watch":"chip-yellow","Low":"chip-green","No Data":"chip-grey"
+  }[flag];
+  document.getElementById('riskChip').innerHTML = `<span class="chip ${flagCls}">${flag}</span>`;
+  document.getElementById('riskAction').textContent = RECOMMENDED_ACTION[flag];
+}
+
+/* ============================ BENEFICIARY / STORAGE ============================ */
+
+async function loadBeneficiaryList(){
+  let list = [...DEFAULT_BENEFICIARIES];
+  try{
+    const res = await window.storage.get('beneficiary_list');
+    if(res && res.value){
+      const stored = JSON.parse(res.value);
+      stored.forEach(n => { if(!list.includes(n)) list.push(n); });
+    }
+  }catch(e){ /* key not found yet, fine */ }
+  return list;
+}
+
+async function saveBeneficiaryList(list){
+  try{ await window.storage.set('beneficiary_list', JSON.stringify(list)); }
+  catch(e){ console.error('Failed to save beneficiary list', e); }
+}
+
+function populateBeneficiarySelect(list){
+  const sel = document.getElementById('beneficiarySelect');
+  sel.innerHTML = list.map(n => `<option value="${n}">${n}</option>`).join('');
+}
+
+function assessmentKey(beneficiary, period){
+  return `assessment:${beneficiary}::${period}`;
+}
+
+async function loadAssessment(beneficiary, period){
+  try{
+    const res = await window.storage.get(assessmentKey(beneficiary, period));
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){ /* not found */ }
+  return null;
+}
+
+async function loadBaselineAII(beneficiary){
+  const rec = await loadAssessment(beneficiary, 'Baseline');
+  if(!rec) return null;
+  const eri = indexPctForRecord(rec, 'ERI');
+  const bhi = indexPctForRecord(rec, 'BHI');
+  const sri = indexPctForRecord(rec, 'SRI');
+  return computeAII(eri, bhi, sri);
+}
+
+function pctFromScores(scoreObj, key){
+  const codes = indexCodes(key);
+  const vals = codes.map(c => scoreObj[c]).filter(v => v !== undefined);
+  if(vals.length === 0) return null;
+  const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+  return { pct: avg/5*100 };
+}
+
+// Seeded/historical records (e.g. imported from Annexure I) store a precomputed
+// percentage per index instead of item-level scores. This reads whichever is present.
+function indexPctForRecord(record, key){
+  if(record && record.computedPct && record.computedPct[key] !== undefined && record.computedPct[key] !== null){
+    return { pct: record.computedPct[key] };
+  }
+  return pctFromScores(record ? record.scores || {} : {}, key);
+}
+
+async function switchContext(){
+  currentBeneficiary = document.getElementById('beneficiarySelect').value;
+  currentPeriod = document.getElementById('periodSelect').value;
+  const rec = await loadAssessment(currentBeneficiary, currentPeriod);
+  scores = rec ? {...rec.scores} : {};
+  refreshAllScaleUI();
+  baselineAIICache = currentPeriod === 'Baseline' ? null : await loadBaselineAII(currentBeneficiary);
+  recompute();
+  const banner = document.getElementById('seededBanner');
+  if(banner){
+    if(rec && rec.seeded){
+      banner.style.display = '';
+      banner.textContent = `This period was imported as a historical summary record (Annexure I) — index totals only, no item-level scores to edit. Answering questions below will save a new, fully-detailed record over it.`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+}
+
+async function saveAssessment(){
+  if(!currentBeneficiary){ showToast('Select a beneficiary first'); return; }
+  const record = {
+    programme: document.getElementById('programmeInput').value.trim() || 'Scatec',
+    cohort: document.getElementById('cohortInput').value.trim() || 'Cohort 1',
+    beneficiary: currentBeneficiary,
+    period: currentPeriod,
+    scores: {...scores},
+    savedAt: new Date().toISOString(),
+  };
+  try{
+    await window.storage.set(assessmentKey(currentBeneficiary, currentPeriod), JSON.stringify(record));
+    showToast(`Saved ${currentBeneficiary} — ${currentPeriod}`);
+    if(currentPeriod === 'Baseline') baselineAIICache = await loadBaselineAII(currentBeneficiary);
+    recompute();
+    await renderHistory();
+    if(document.getElementById('view-monitor').style.display !== 'none'){ await renderMonitor(); }
+  }catch(e){
+    console.error(e);
+    showToast('Could not save — please try again');
+  }
+}
+
+async function renderHistory(){
+  const area = document.getElementById('historyArea');
+  const list = await loadBeneficiaryList();
+  const periods = ['Baseline','Q1','Q2','Q3','Q4','Endline'];
+  let records = [];
+  for(const name of list){
+    for(const p of periods){
+      const rec = await loadAssessment(name, p).catch(()=>null);
+      if(rec) records.push(rec);
+    }
+  }
+  if(records.length === 0){
+    area.innerHTML = '<div class="empty-note">Nothing saved yet in this browser.</div>';
+    return;
+  }
+  records.sort((a,b)=> new Date(b.savedAt) - new Date(a.savedAt));
+  area.innerHTML = records.slice(0,12).map(r => {
+    const eri = indexPctForRecord(r,'ERI');
+    const bhi = indexPctForRecord(r,'BHI');
+    const sri = indexPctForRecord(r,'SRI');
+    const aii = computeAII(eri,bhi,sri);
+    return `
+      <div class="history-item" data-name="${r.beneficiary}" data-period="${r.period}">
+        <div>
+          <div class="history-name">${r.beneficiary}</div>
+          <div class="history-sub">${r.period} · ${Object.keys(r.scores).length} items</div>
+        </div>
+        <div class="chip ${ragFor(aii).cls}">${aii!==null?aii.toFixed(0)+'%':'—'}</div>
+      </div>`;
+  }).join('');
+
+  area.querySelectorAll('.history-item').forEach(el => {
+    el.addEventListener('click', async () => {
+      document.getElementById('beneficiarySelect').value = el.getAttribute('data-name');
+      document.getElementById('periodSelect').value = el.getAttribute('data-period');
+      await switchContext();
+    });
+  });
+}
+
+/* ============================ MONITOR VIEW ============================ */
+
+const PERIOD_ORDER = ['Baseline','Q1','Q2','Q3','Q4','Endline'];
+let trendChartInstance = null;
+
+async function loadAllAssessments(){
+  const list = await loadBeneficiaryList();
+  let records = [];
+  for(const name of list){
+    for(const p of PERIOD_ORDER){
+      const rec = await loadAssessment(name, p).catch(()=>null);
+      if(rec) records.push(rec);
+    }
+  }
+  return records;
+}
+
+async function renderMonitor(){
+  const records = await loadAllAssessments();
+  const kpiRow = document.getElementById('kpiRow');
+
+  if(records.length === 0){
+    kpiRow.innerHTML = `<div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-label">No data yet</div><div class="kpi-sub">Save assessments in the Collect tab to populate this view.</div></div>`;
+    document.getElementById('ragPeriodLabel').textContent = 'No assessments saved yet.';
+    document.getElementById('ragDist').innerHTML = '';
+    document.getElementById('riskTableBody').innerHTML = `<tr><td colspan="6" class="empty-note">No assessments saved yet.</td></tr>`;
+    if(trendChartInstance){ trendChartInstance.destroy(); trendChartInstance = null; }
+    return;
+  }
+
+  const byBeneficiary = {};
+  records.forEach(r => {
+    if(!byBeneficiary[r.beneficiary]) byBeneficiary[r.beneficiary] = {};
+    byBeneficiary[r.beneficiary][r.period] = r;
+  });
+  const beneficiaryNames = Object.keys(byBeneficiary);
+
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b.pct,0)/arr.length : null;
+  const trend = PERIOD_ORDER.map(period => {
+    const recs = records.filter(r => r.period === period);
+    if(recs.length === 0) return {period, eri:null, bhi:null, sri:null, aii:null, n:0};
+    const eriAvg = avg(recs.map(r=>indexPctForRecord(r,'ERI')).filter(Boolean));
+    const bhiAvg = avg(recs.map(r=>indexPctForRecord(r,'BHI')).filter(Boolean));
+    const sriAvg = avg(recs.map(r=>indexPctForRecord(r,'SRI')).filter(Boolean));
+    const present = [eriAvg,bhiAvg,sriAvg].filter(v=>v!==null);
+    let aii = null;
+    if(eriAvg!==null && bhiAvg!==null && sriAvg!==null) aii = eriAvg*0.3 + bhiAvg*0.4 + sriAvg*0.3;
+    else if(present.length) aii = present.reduce((a,b)=>a+b,0)/present.length;
+    return {period, eri:eriAvg, bhi:bhiAvg, sri:sriAvg, aii, n:recs.length};
+  }).filter(t => t.n > 0);
+
+  const latest = trend.length ? trend[trend.length-1] : null;
+  const baselineT = trend.find(t=>t.period==='Baseline');
+  const growthCohort = (latest && baselineT && latest.period !== 'Baseline' && latest.aii!==null && baselineT.aii!==null)
+    ? latest.aii - baselineT.aii : null;
+
+  kpiRow.innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Beneficiaries tracked</div><div class="kpi-value">${beneficiaryNames.length}</div><div class="kpi-sub">with a saved assessment</div></div>
+    <div class="kpi-card"><div class="kpi-label">Latest period</div><div class="kpi-value">${latest ? latest.period : '—'}</div><div class="kpi-sub">${latest ? latest.n + ' assessed' : ''}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cohort AII (latest)</div><div class="kpi-value">${latest && latest.aii!==null ? latest.aii.toFixed(1)+'%' : '—'}</div><div class="kpi-sub">${ragFor(latest?latest.aii:null).label}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Cohort AII (baseline)</div><div class="kpi-value">${baselineT && baselineT.aii!==null ? baselineT.aii.toFixed(1)+'%' : '—'}</div><div class="kpi-sub">reference point</div></div>
+    <div class="kpi-card"><div class="kpi-label">Growth since baseline</div><div class="kpi-value">${growthCohort!==null ? (growthCohort>=0?'+':'')+growthCohort.toFixed(1)+' pp' : '—'}</div><div class="kpi-sub">cohort average</div></div>
+  `;
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  const labels = trend.map(t=>t.period);
+  const dataset = (key, color) => ({
+    label:key, data: trend.map(t=>t[key.toLowerCase()]), borderColor:color, backgroundColor:color,
+    tension:0.3, spanGaps:true, pointRadius:3,
+  });
+  if(trendChartInstance) trendChartInstance.destroy();
+  trendChartInstance = new Chart(ctx, {
+    type:'line',
+    data:{ labels, datasets:[
+      dataset('ERI','#4E7D73'), dataset('BHI','#C98A2C'), dataset('SRI','#2F9E5B'), dataset('AII','#1E3A34')
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ min:0, max:100, ticks:{callback:v=>v+'%'} } },
+      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'Inter',size:11}} } }
+    }
+  });
+
+  const latestRecords = latest ? records.filter(r=>r.period===latest.period) : [];
+  const ragCounts = {Green:0,Yellow:0,Orange:0,Red:0,'No Data':0};
+  latestRecords.forEach(r=>{
+    const eri = indexPctForRecord(r,'ERI'), bhi = indexPctForRecord(r,'BHI'), sri = indexPctForRecord(r,'SRI');
+    ragCounts[ragFor(computeAII(eri,bhi,sri)).label]++;
+  });
+  document.getElementById('ragPeriodLabel').textContent = latest ? `${latest.period} · ${latestRecords.length} beneficiaries assessed` : 'No assessments saved yet.';
+  const totalRag = latestRecords.length || 1;
+  const ragColors = {Green:'var(--green)',Yellow:'var(--yellow)',Orange:'var(--orange)',Red:'var(--red)','No Data':'var(--grey)'};
+  document.getElementById('ragDist').innerHTML = Object.entries(ragCounts).filter(([,c])=>c>0).map(([label,count])=>
+    `<div class="rag-seg" style="width:${(count/totalRag*100)}%; background:${ragColors[label]}">${count}</div>`
+  ).join('') || '<div class="empty-note">No data</div>';
+
+  const rows = beneficiaryNames.map(name => {
+    const periodsForName = PERIOD_ORDER.filter(p => byBeneficiary[name][p]);
+    const latestP = periodsForName[periodsForName.length-1];
+    const rec = byBeneficiary[name][latestP];
+    const eri = indexPctForRecord(rec,'ERI'), bhi = indexPctForRecord(rec,'BHI'), sri = indexPctForRecord(rec,'SRI');
+    const aii = computeAII(eri,bhi,sri);
+    const baseRec = byBeneficiary[name]['Baseline'];
+    let growth = null;
+    if(baseRec && latestP !== 'Baseline'){
+      const baseAii = computeAII(indexPctForRecord(baseRec,'ERI'), indexPctForRecord(baseRec,'BHI'), indexPctForRecord(baseRec,'SRI'));
+      if(baseAii!==null && aii!==null) growth = aii - baseAii;
+    }
+    return {name, latestP, aii, growth, flag: riskFlagFor(aii, growth)};
+  });
+  const riskOrder = {High:0,Declining:1,Medium:2,Watch:3,Low:4,'No Data':5};
+  rows.sort((a,b)=> riskOrder[a.flag]-riskOrder[b.flag]);
+  const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
+  document.getElementById('riskTableBody').innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.name}</td>
+      <td>${r.latestP}</td>
+      <td>${r.aii!==null?r.aii.toFixed(1)+'%':'—'}</td>
+      <td>${r.growth!==null ? (r.growth>=0?'+':'')+r.growth.toFixed(1)+' pp' : '—'}</td>
+      <td><span class="chip ${flagCls[r.flag]}">${r.flag}</span></td>
+      <td>${RECOMMENDED_ACTION[r.flag]}</td>
+    </tr>`).join('');
+}
+
+/* ---------- Jobs & Revenue tracker ---------- */
+
+function jrKey(period){ return `jobs_revenue:${period}`; }
+
+async function loadJR(){
+  const list = [];
+  for(const p of PERIOD_ORDER){
+    try{
+      const res = await window.storage.get(jrKey(p));
+      if(res && res.value) list.push(JSON.parse(res.value));
+    }catch(e){ /* not logged for this period */ }
+  }
+  return list;
+}
+
+async function saveJR(){
+  const period = document.getElementById('jrPeriod').value;
+  const record = {
+    period,
+    spend: parseFloat(document.getElementById('jrSpend').value) || 0,
+    revenue: parseFloat(document.getElementById('jrRevenue').value) || 0,
+    ft: parseInt(document.getElementById('jrFT').value, 10) || 0,
+    pt: parseInt(document.getElementById('jrPT').value, 10) || 0,
+  };
+  try{
+    await window.storage.set(jrKey(period), JSON.stringify(record));
+    showToast(`Logged ${period}`);
+    ['jrSpend','jrRevenue','jrFT','jrPT'].forEach(id => document.getElementById(id).value = '');
+    await renderJR();
+  }catch(e){ showToast('Could not save — please try again'); }
+}
+
+async function deleteJR(period){
+  try{ await window.storage.delete(jrKey(period)); showToast(`Removed ${period}`); await renderJR(); }
+  catch(e){ showToast('Could not remove'); }
+}
+
+async function renderJR(){
+  const list = await loadJR();
+  const body = document.getElementById('jrTableBody');
+  if(list.length === 0){
+    body.innerHTML = `<tr><td colspan="7" class="empty-note">No periods logged yet.</td></tr>`;
+    document.getElementById('jrTotalsRow').innerHTML = '';
+    return;
+  }
+  list.sort((a,b)=> PERIOD_ORDER.indexOf(a.period) - PERIOD_ORDER.indexOf(b.period));
+  const fmt = n => `R${n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  body.innerHTML = list.map(r => `
+    <tr>
+      <td>${r.period}</td>
+      <td>${fmt(r.spend)}</td>
+      <td>${fmt(r.revenue)}</td>
+      <td>${r.spend>0 ? (r.revenue/r.spend).toFixed(2)+' : 1' : '—'}</td>
+      <td>${r.ft}</td>
+      <td>${r.pt}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="deleteJR('${r.period}')">Remove</button></td>
+    </tr>`).join('');
+
+  const totalSpend = list.reduce((s,r)=>s+r.spend,0);
+  const totalRevenue = list.reduce((s,r)=>s+r.revenue,0);
+  document.getElementById('jrTotalsRow').innerHTML = `
+    <td>Total</td><td>${fmt(totalSpend)}</td><td>${fmt(totalRevenue)}</td>
+    <td>${totalSpend>0 ? (totalRevenue/totalSpend).toFixed(2)+' : 1' : '—'}</td>
+    <td>${list.reduce((s,r)=>s+r.ft,0)}</td><td>${list.reduce((s,r)=>s+r.pt,0)}</td><td></td>
+  `;
+}
+
+function switchTab(tab){
+  const views = { collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors' };
+  const btns = { collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors' };
+  Object.entries(views).forEach(([key, id]) => {
+    document.getElementById(id).style.display = (key === tab) ? '' : 'none';
+  });
+  Object.entries(btns).forEach(([key, id]) => {
+    document.getElementById(id).classList.toggle('active', key === tab);
+  });
+  if(tab === 'monitor'){ renderMonitor(); renderJR(); }
+  if(tab === 'profile'){ renderProfile(); }
+  if(tab === 'peii'){ switchPeiiContext(); renderPeiiSummary(); }
+  if(tab === 'report'){ switchReportContext(); }
+  if(tab === 'sponsors'){ renderSponsorPortal(); }
+}
+
+/* ============================ CLIENT PORTAL / SPONSORS ============================ */
+
+function cohortMapKey(programme, cohort){ return `${programme}::${cohort}`; }
+
+async function loadSponsors(){
+  try{
+    const res = await window.storage.get('sponsor_list');
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){ /* not found yet */ }
+  return [];
+}
+
+async function saveSponsors(list){
+  try{ await window.storage.set('sponsor_list', JSON.stringify(list)); }
+  catch(e){ console.error('Failed to save sponsor list', e); showToast('Could not save sponsor — please try again'); }
+}
+
+async function loadCohortMap(){
+  try{
+    const res = await window.storage.get('cohort_sponsor_map');
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){ /* not found yet */ }
+  return {};
+}
+
+async function saveCohortMap(map){
+  try{ await window.storage.set('cohort_sponsor_map', JSON.stringify(map)); }
+  catch(e){ console.error('Failed to save cohort allocations', e); showToast('Could not save allocation — please try again'); }
+}
+
+// Scans saved assessment records to suggest Programme/Cohort combinations
+// that are already in use, so allocation doesn't rely on retyping them.
+async function discoverKnownCohorts(){
+  const combos = new Map(); // key -> {programme, cohort}
+  try{
+    const listed = await window.storage.list('assessment:');
+    const keys = (listed && listed.keys) ? listed.keys : [];
+    for(const key of keys){
+      try{
+        const res = await window.storage.get(key);
+        if(res && res.value){
+          const rec = JSON.parse(res.value);
+          if(rec.programme && rec.cohort){
+            combos.set(cohortMapKey(rec.programme, rec.cohort), { programme: rec.programme, cohort: rec.cohort });
+          }
+        }
+      }catch(e){ /* skip unreadable record */ }
+    }
+  }catch(e){ /* storage.list not available or empty, fine */ }
+  return combos;
+}
+
+async function addSponsor(){
+  const name = document.getElementById('sponsorNameInput').value.trim();
+  if(!name){ showToast('Enter a sponsor organisation name'); return; }
+  const sponsor = {
+    id: `sp_${Date.now()}_${Math.random().toString(36).slice(2,7)}`,
+    name,
+    contact: document.getElementById('sponsorContactInput').value.trim(),
+    email: document.getElementById('sponsorEmailInput').value.trim(),
+    notes: document.getElementById('sponsorNotesInput').value.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  const list = await loadSponsors();
+  list.push(sponsor);
+  await saveSponsors(list);
+  document.getElementById('sponsorNameInput').value = '';
+  document.getElementById('sponsorContactInput').value = '';
+  document.getElementById('sponsorEmailInput').value = '';
+  document.getElementById('sponsorNotesInput').value = '';
+  showToast(`Added sponsor — ${name}`);
+  await renderSponsorPortal();
+}
+
+async function deleteSponsor(id){
+  const list = await loadSponsors();
+  const sponsor = list.find(s => s.id === id);
+  const remaining = list.filter(s => s.id !== id);
+  await saveSponsors(remaining);
+  // unassign any cohorts pointed at this sponsor
+  const map = await loadCohortMap();
+  let changed = false;
+  Object.keys(map).forEach(k => { if(map[k] === id){ delete map[k]; changed = true; } });
+  if(changed) await saveCohortMap(map);
+  showToast(sponsor ? `Removed sponsor — ${sponsor.name}` : 'Sponsor removed');
+  await renderSponsorPortal();
+}
+
+async function allocateCohort(){
+  const programme = document.getElementById('allocProgrammeInput').value.trim();
+  const cohort = document.getElementById('allocCohortInput').value.trim();
+  const sponsorId = document.getElementById('allocSponsorSelect').value;
+  if(!programme || !cohort){ showToast('Enter both a programme and a cohort'); return; }
+  if(!sponsorId){ showToast('Select a sponsor to allocate to'); return; }
+  const map = await loadCohortMap();
+  map[cohortMapKey(programme, cohort)] = sponsorId;
+  await saveCohortMap(map);
+  document.getElementById('allocCohortInput').value = '';
+  showToast(`Allocated ${programme} — ${cohort}`);
+  await renderSponsorPortal();
+  await renderSponsorHint();
+}
+
+async function unassignCohort(key){
+  const map = await loadCohortMap();
+  delete map[key];
+  await saveCohortMap(map);
+  showToast('Cohort unassigned');
+  await renderSponsorPortal();
+  await renderSponsorHint();
+}
+
+async function renderSponsorPortal(){
+  const sponsors = await loadSponsors();
+  const map = await loadCohortMap();
+  const known = await discoverKnownCohorts();
+
+  // Populate datalists for programme/cohort suggestions
+  const programmeNames = [...new Set([...known.values()].map(c => c.programme))];
+  document.getElementById('knownProgrammes').innerHTML = programmeNames.map(p => `<option value="${p}"></option>`).join('');
+  const cohortNames = [...new Set([...known.values()].map(c => c.cohort))];
+  document.getElementById('knownCohorts').innerHTML = cohortNames.map(c => `<option value="${c}"></option>`).join('');
+
+  // Populate sponsor select
+  const sponsorSelect = document.getElementById('allocSponsorSelect');
+  const prevSelected = sponsorSelect.value;
+  sponsorSelect.innerHTML = '<option value="">— Select a sponsor —</option>' +
+    sponsors.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if(sponsors.some(s => s.id === prevSelected)) sponsorSelect.value = prevSelected;
+
+  // Sponsor cards
+  const grid = document.getElementById('sponsorGrid');
+  if(sponsors.length === 0){
+    grid.innerHTML = '<div class="empty-note">No sponsor clients added yet.</div>';
+  } else {
+    grid.innerHTML = sponsors.map(s => {
+      const cohorts = Object.entries(map).filter(([k, sid]) => sid === s.id).map(([k]) => k.split('::'));
+      const pills = cohorts.length
+        ? `<div class="cohort-pill-row">${cohorts.map(([p,c]) => `<span class="cohort-pill">${p} — ${c} <button data-unassign="${cohortMapKey(p,c)}" title="Unassign">✕</button></span>`).join('')}</div>`
+        : `<div class="cohort-pill-row"><span class="empty-note">No cohorts allocated yet</span></div>`;
+      return `
+        <div class="sponsor-card">
+          <h4>${s.name}</h4>
+          <div class="sponsor-contact">${[s.contact, s.email].filter(Boolean).join(' · ') || 'No contact details on file'}</div>
+          ${pills}
+          ${s.notes ? `<div class="sponsor-notes">${s.notes}</div>` : ''}
+          <div class="sponsor-card-actions">
+            <button class="btn btn-ghost btn-sm" data-delete-sponsor="${s.id}">Remove sponsor</button>
+          </div>
+        </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-delete-sponsor]').forEach(btn => {
+      btn.addEventListener('click', () => deleteSponsor(btn.getAttribute('data-delete-sponsor')));
+    });
+    grid.querySelectorAll('[data-unassign]').forEach(btn => {
+      btn.addEventListener('click', () => unassignCohort(btn.getAttribute('data-unassign')));
+    });
+  }
+
+  // Allocation table
+  const tbody = document.querySelector('#allocationTable tbody');
+  const entries = Object.entries(map);
+  if(entries.length === 0){
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-note">No cohorts allocated yet.</td></tr>';
+  } else {
+    tbody.innerHTML = entries.map(([key, sponsorId]) => {
+      const [programme, cohort] = key.split('::');
+      const sponsor = sponsors.find(s => s.id === sponsorId);
+      return `<tr>
+        <td>${programme}</td><td>${cohort}</td><td>${sponsor ? sponsor.name : '<span class="empty-note">Unknown sponsor</span>'}</td>
+        <td><button class="btn btn-ghost btn-sm" data-unassign-row="${key}">Unassign</button></td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-unassign-row]').forEach(btn => {
+      btn.addEventListener('click', () => unassignCohort(btn.getAttribute('data-unassign-row')));
+    });
+  }
+}
+
+// Shows which sponsor (if any) is backing the programme/cohort currently
+// selected in the Collect data setup bar.
+async function renderSponsorHint(){
+  const hintEl = document.getElementById('sponsorHint');
+  if(!hintEl) return;
+  const programme = document.getElementById('programmeInput').value.trim() || 'Scatec';
+  const cohort = document.getElementById('cohortInput').value.trim() || 'Cohort 1';
+  const map = await loadCohortMap();
+  const sponsorId = map[cohortMapKey(programme, cohort)];
+  if(!sponsorId){
+    hintEl.innerHTML = `<span class="chip chip-grey">No sponsor allocated</span> for ${programme} — ${cohort}. Allocate one in the Client portal tab.`;
+    return;
+  }
+  const sponsors = await loadSponsors();
+  const sponsor = sponsors.find(s => s.id === sponsorId);
+  hintEl.innerHTML = sponsor
+    ? `<span class="chip chip-green">Sponsored</span> ${programme} — ${cohort} is backed by <b>${sponsor.name}</b>.`
+    : `<span class="chip chip-grey">No sponsor allocated</span> for ${programme} — ${cohort}. Allocate one in the Client portal tab.`;
+}
+
+/* ============================ HISTORICAL SEED DATA ============================ */
+
+async function loadHistoricalSeed(){
+  let added = 0, skipped = 0;
+  for(const [name, periods] of Object.entries(SEED_DIAGNOSTIC)){
+    for(const [period, vals] of Object.entries(periods)){
+      const existing = await loadAssessment(name, period);
+      if(existing){ skipped++; continue; }
+      const [eri, bhi, sri] = vals;
+      const record = {
+        programme: 'Scatec', cohort: 'Cohort 1', beneficiary: name, period,
+        scores: {}, computedPct: { ERI: eri, BHI: bhi, SRI: sri },
+        savedAt: new Date().toISOString(), seeded: true,
+      };
+      await window.storage.set(assessmentKey(name, period), JSON.stringify(record));
+      added++;
+    }
+  }
+  for(const [name, quarters] of Object.entries(SEED_PEII)){
+    for(const [quarter, pct, feedback] of quarters){
+      const existing = await loadPEII(name, quarter);
+      if(existing){ skipped++; continue; }
+      const record = {
+        beneficiary: name, quarter, dims: {}, computedPct: pct, feedback,
+        savedAt: new Date().toISOString(), seeded: true,
+      };
+      await window.storage.set(peiiKey(name, quarter), JSON.stringify(record));
+      added++;
+    }
+  }
+  const currentList = await loadBeneficiaryList();
+  const merged = [...currentList];
+  Object.keys(SEED_DIAGNOSTIC).forEach(n => { if(!merged.includes(n)) merged.push(n); });
+  await saveBeneficiaryList(merged);
+  populateBeneficiarySelect(merged);
+  populateSelect('profileBeneficiarySelect', merged);
+  populateSelect('peiiBeneficiarySelect', merged);
+  populateSelect('reportBeneficiarySelect', merged);
+
+  showToast(`Historical data loaded: ${added} record(s) added${skipped ? `, ${skipped} already existed` : ''}`);
+  await renderMonitor();
+  await renderHistory();
+}
+
+/* ============================ BENEFICIARY PROFILE ============================ */
+
+let profileChartInstance = null;
+
+function populateSelect(id, list){
+  const sel = document.getElementById(id);
+  const prev = sel.value;
+  sel.innerHTML = list.map(n => `<option value="${n}">${n}</option>`).join('');
+  if(list.includes(prev)) sel.value = prev;
+}
+
+async function renderProfile(){
+  const list = await loadBeneficiaryList();
+  populateSelect('profileBeneficiarySelect', list);
+  const name = document.getElementById('profileBeneficiarySelect').value;
+  if(!name) return;
+
+  const recs = {};
+  for(const p of PERIOD_ORDER){
+    const r = await loadAssessment(name, p);
+    if(r) recs[p] = r;
+  }
+  const periodsWithData = PERIOD_ORDER.filter(p => recs[p]);
+
+  const kpiRow = document.getElementById('profileKpiRow');
+  if(periodsWithData.length === 0){
+    kpiRow.innerHTML = `<div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-label">No data yet</div><div class="kpi-sub">Save an assessment for ${name} in the Collect tab, or load historical data from Monitor.</div></div>`;
+    document.getElementById('profileTableBody').innerHTML = `<tr><td colspan="9" class="empty-note">No assessments saved yet.</td></tr>`;
+    if(profileChartInstance){ profileChartInstance.destroy(); profileChartInstance = null; }
+    document.getElementById('profilePeiiTableBody').innerHTML = `<tr><td colspan="4" class="empty-note">No PEII entries yet.</td></tr>`;
+    return;
+  }
+
+  const baseRec = recs['Baseline'];
+  const baseAii = baseRec ? computeAII(indexPctForRecord(baseRec,'ERI'), indexPctForRecord(baseRec,'BHI'), indexPctForRecord(baseRec,'SRI')) : null;
+  const latestP = periodsWithData[periodsWithData.length-1];
+  const latestRec = recs[latestP];
+  const latestAii = computeAII(indexPctForRecord(latestRec,'ERI'), indexPctForRecord(latestRec,'BHI'), indexPctForRecord(latestRec,'SRI'));
+  const growth = (baseAii!==null && latestAii!==null && latestP!=='Baseline') ? latestAii-baseAii : null;
+  const flag = riskFlagFor(latestAii, growth);
+
+  kpiRow.innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Latest period</div><div class="kpi-value">${latestP}</div><div class="kpi-sub">${ragFor(latestAii).label}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Latest AII</div><div class="kpi-value">${latestAii!==null?latestAii.toFixed(1)+'%':'—'}</div><div class="kpi-sub">weighted 30/40/30</div></div>
+    <div class="kpi-card"><div class="kpi-label">Baseline AII</div><div class="kpi-value">${baseAii!==null?baseAii.toFixed(1)+'%':'—'}</div><div class="kpi-sub">reference point</div></div>
+    <div class="kpi-card"><div class="kpi-label">Growth</div><div class="kpi-value">${growth!==null?(growth>=0?'+':'')+growth.toFixed(1)+' pp':'—'}</div><div class="kpi-sub">vs baseline</div></div>
+    <div class="kpi-card"><div class="kpi-label">Risk flag</div><div class="kpi-value" style="font-size:16px;"><span class="chip ${({High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'})[flag]}">${flag}</span></div></div>
+  `;
+
+  const ctx = document.getElementById('profileChart').getContext('2d');
+  const seriesFor = key => periodsWithData.map(p => { const v = indexPctForRecord(recs[p], key); return v ? v.pct : null; });
+  const aiiSeries = periodsWithData.map(p => {
+    const r = recs[p];
+    return computeAII(indexPctForRecord(r,'ERI'), indexPctForRecord(r,'BHI'), indexPctForRecord(r,'SRI'));
+  });
+  if(profileChartInstance) profileChartInstance.destroy();
+  profileChartInstance = new Chart(ctx, {
+    type:'line',
+    data:{ labels: periodsWithData, datasets:[
+      { label:'ERI', data:seriesFor('ERI'), borderColor:'#4E7D73', backgroundColor:'#4E7D73', tension:0.3, spanGaps:true, pointRadius:3 },
+      { label:'BHI', data:seriesFor('BHI'), borderColor:'#C98A2C', backgroundColor:'#C98A2C', tension:0.3, spanGaps:true, pointRadius:3 },
+      { label:'SRI', data:seriesFor('SRI'), borderColor:'#2F9E5B', backgroundColor:'#2F9E5B', tension:0.3, spanGaps:true, pointRadius:3 },
+      { label:'AII', data:aiiSeries, borderColor:'#1E3A34', backgroundColor:'#1E3A34', tension:0.3, spanGaps:true, pointRadius:3, borderWidth:3 },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ min:0, max:100, ticks:{callback:v=>v+'%'} } },
+      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'Inter',size:11}} } } }
+  });
+
+  const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
+  document.getElementById('profileTableBody').innerHTML = periodsWithData.map(p => {
+    const r = recs[p];
+    const eri = indexPctForRecord(r,'ERI'), bhi = indexPctForRecord(r,'BHI'), sri = indexPctForRecord(r,'SRI');
+    const aii = computeAII(eri,bhi,sri);
+    const g = (baseAii!==null && aii!==null && p!=='Baseline') ? aii-baseAii : null;
+    const f = riskFlagFor(aii, g);
+    return `<tr>
+      <td>${p}${r.seeded?' <span class="chip chip-grey" style="padding:2px 6px;">seeded</span>':''}</td>
+      <td>${eri?eri.pct.toFixed(1)+'%':'—'}</td>
+      <td>${bhi?bhi.pct.toFixed(1)+'%':'—'}</td>
+      <td>${sri?sri.pct.toFixed(1)+'%':'—'}</td>
+      <td>${aii!==null?aii.toFixed(1)+'%':'—'}</td>
+      <td><span class="chip ${ragFor(aii).cls}">${ragFor(aii).label}</span></td>
+      <td>${g!==null?(g>=0?'+':'')+g.toFixed(1)+' pp':'—'}</td>
+      <td><span class="chip ${flagCls[f]}">${f}</span></td>
+      <td>${RECOMMENDED_ACTION[f]}</td>
+    </tr>`;
+  }).join('');
+
+  const peiiRecs = [];
+  for(const q of ['Q1','Q2','Q3','Q4']){
+    const r = await loadPEII(name, q);
+    if(r) peiiRecs.push(r);
+  }
+  document.getElementById('profilePeiiTableBody').innerHTML = peiiRecs.length ? peiiRecs.map(r => {
+    const pct = peiiPctForRecord(r);
+    const rating = ratingForPEII(pct);
+    return `<tr>
+      <td>${r.quarter}</td>
+      <td>${pct!==null?pct.toFixed(1)+'%':'—'}</td>
+      <td><span class="chip ${PEII_RATING_CLS[rating]}">${rating}</span></td>
+      <td>${r.feedback ? r.feedback : '<span class="empty-note">—</span>'}</td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="4" class="empty-note">No PEII entries yet.</td></tr>`;
+}
+
+/* ============================ PEII CAPTURE ============================ */
+
+function peiiKey(beneficiary, quarter){ return `peii:${beneficiary}::${quarter}`; }
+
+async function loadPEII(beneficiary, quarter){
+  try{
+    const res = await window.storage.get(peiiKey(beneficiary, quarter));
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){ /* not found */ }
+  return null;
+}
+
+let peiiDims = {};
+
+function buildPeiiDimArea(){
+  const area = document.getElementById('peiiDimArea');
+  area.innerHTML = PEII_DIMENSIONS.map(([key, title, desc]) => `
+    <div class="q-row">
+      <div>
+        <div class="q-text">${title}</div>
+        <span class="q-code">${desc}</span>
+      </div>
+      <div class="scale" data-code="${key}">
+        ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}">${v}</button>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  area.querySelectorAll('.scale button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.parentElement.getAttribute('data-code');
+      const val = parseInt(btn.getAttribute('data-val'), 10);
+      if(peiiDims[key] === val) delete peiiDims[key]; else peiiDims[key] = val;
+      refreshPeiiDimUI();
+      recomputePeiiSidebar();
+    });
+  });
+}
+
+function refreshPeiiDimUI(){
+  document.querySelectorAll('#peiiDimArea .scale').forEach(wrap => {
+    const key = wrap.getAttribute('data-code');
+    wrap.querySelectorAll('button').forEach(b => b.classList.toggle('sel', parseInt(b.getAttribute('data-val'),10) === peiiDims[key]));
+  });
+}
+
+function recomputePeiiSidebar(){
+  const vals = Object.values(peiiDims);
+  const pct = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length/5*100 : null;
+  document.getElementById('peiiValue').textContent = pct!==null ? `${pct.toFixed(1)}%` : '—';
+  const rating = ratingForPEII(pct);
+  document.getElementById('peiiRatingChip').innerHTML = `<span class="chip ${PEII_RATING_CLS[rating]}">${rating}</span>`;
+}
+
+async function switchPeiiContext(){
+  const list = await loadBeneficiaryList();
+  populateSelect('peiiBeneficiarySelect', list);
+  const beneficiary = document.getElementById('peiiBeneficiarySelect').value;
+  const quarter = document.getElementById('peiiQuarterSelect').value;
+  const rec = await loadPEII(beneficiary, quarter);
+  peiiDims = (rec && rec.dims) ? {...rec.dims} : {};
+  document.getElementById('peiiFeedback').value = rec ? (rec.feedback || '') : '';
+  refreshPeiiDimUI();
+  recomputePeiiSidebar();
+
+  const banner = document.getElementById('peiiSeededBanner');
+  if(rec && rec.seeded){
+    banner.style.display = '';
+    banner.textContent = `This quarter was imported as a historical summary record (Annexure II) — overall score and feedback only, no per-dimension detail to edit. Rating dimensions below will save a new, fully-detailed record over it.`;
+  } else {
+    banner.style.display = 'none';
+  }
+  if(rec && rec.computedPct !== undefined && rec.computedPct !== null){
+    document.getElementById('peiiValue').textContent = `${rec.computedPct.toFixed(1)}%`;
+    const rating = ratingForPEII(rec.computedPct);
+    document.getElementById('peiiRatingChip').innerHTML = `<span class="chip ${PEII_RATING_CLS[rating]}">${rating}</span>`;
+  }
+}
+
+async function savePEII(){
+  const beneficiary = document.getElementById('peiiBeneficiarySelect').value;
+  const quarter = document.getElementById('peiiQuarterSelect').value;
+  if(!beneficiary){ showToast('Select a beneficiary first'); return; }
+  const record = {
+    beneficiary, quarter, dims: {...peiiDims},
+    feedback: document.getElementById('peiiFeedback').value.trim(),
+    savedAt: new Date().toISOString(),
+  };
+  try{
+    await window.storage.set(peiiKey(beneficiary, quarter), JSON.stringify(record));
+    showToast(`Saved PEII — ${beneficiary} ${quarter}`);
+    document.getElementById('peiiSeededBanner').style.display = 'none';
+    await renderPeiiSummary();
+  }catch(e){ showToast('Could not save — please try again'); }
+}
+
+async function renderPeiiSummary(){
+  const list = await loadBeneficiaryList();
+  const rows = [];
+  for(const name of list){
+    const quarters = {};
+    let any = false;
+    for(const q of ['Q1','Q2','Q3','Q4']){
+      const r = await loadPEII(name, q);
+      if(r){ quarters[q] = peiiPctForRecord(r); any = true; }
+    }
+    if(!any) continue;
+    const vals = Object.values(quarters).filter(v=>v!==null);
+    const overall = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+    rows.push({name, quarters, overall});
+  }
+  const body = document.getElementById('peiiSummaryTableBody');
+  if(rows.length === 0){
+    body.innerHTML = `<tr><td colspan="6" class="empty-note">No PEII entries yet.</td></tr>`;
+    document.getElementById('peiiSummaryTotalsRow').innerHTML = '';
+    return;
+  }
+  body.innerHTML = rows.map(r => `
+    <tr>
+      <td>${r.name}</td>
+      ${['Q1','Q2','Q3','Q4'].map(q => `<td>${r.quarters[q]!==undefined && r.quarters[q]!==null ? r.quarters[q].toFixed(0)+'%' : '—'}</td>`).join('')}
+      <td><span class="chip ${PEII_RATING_CLS[ratingForPEII(r.overall)]}">${r.overall!==null?r.overall.toFixed(0)+'%':'—'}</span></td>
+    </tr>`).join('');
+  const cohortOverall = rows.filter(r=>r.overall!==null);
+  const cohortAvg = cohortOverall.length ? cohortOverall.reduce((a,b)=>a+b.overall,0)/cohortOverall.length : null;
+  document.getElementById('peiiSummaryTotalsRow').innerHTML = `
+    <td>Cohort average</td><td></td><td></td><td></td><td></td>
+    <td>${cohortAvg!==null?cohortAvg.toFixed(0)+'%':'—'}</td>
+  `;
+}
+
+/* ============================ NARRATIVE REPORT ============================ */
+
+function narrativeKey(beneficiary){ return `narrative:${beneficiary}`; }
+
+async function loadNarrative(beneficiary){
+  try{
+    const res = await window.storage.get(narrativeKey(beneficiary));
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){ /* not found */ }
+  return null;
+}
+
+async function gatherBeneficiaryData(name){
+  const recs = {};
+  for(const p of PERIOD_ORDER){
+    const r = await loadAssessment(name, p);
+    if(r) recs[p] = r;
+  }
+  const periodsWithData = PERIOD_ORDER.filter(p => recs[p]);
+  const baseRec = recs['Baseline'];
+  const baseAii = baseRec ? computeAII(indexPctForRecord(baseRec,'ERI'), indexPctForRecord(baseRec,'BHI'), indexPctForRecord(baseRec,'SRI')) : null;
+  const latestP = periodsWithData.length ? periodsWithData[periodsWithData.length-1] : null;
+  const latestRec = latestP ? recs[latestP] : null;
+  const latestAii = latestRec ? computeAII(indexPctForRecord(latestRec,'ERI'), indexPctForRecord(latestRec,'BHI'), indexPctForRecord(latestRec,'SRI')) : null;
+  const growth = (baseAii!==null && latestAii!==null && latestP!=='Baseline') ? latestAii-baseAii : null;
+  const flag = riskFlagFor(latestAii, growth);
+  const peiiRecs = [];
+  for(const q of ['Q1','Q2','Q3','Q4']){
+    const r = await loadPEII(name, q);
+    if(r) peiiRecs.push({...r, pct: peiiPctForRecord(r)});
+  }
+  return { name, recs, periodsWithData, baseAii, latestP, latestRec, latestAii, growth, flag, peiiRecs };
+}
+
+function renderReportStats(data){
+  const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
+
+  document.getElementById('statOverview').innerHTML = data.periodsWithData.length ? `
+    <b>${data.name}</b> — ${data.periodsWithData.length} assessment${data.periodsWithData.length>1?'s':''} on record (${data.periodsWithData.join(', ')}).<br>
+    Latest period assessed: <b>${data.latestP}</b> · Overall Impact Index (AII): <b>${data.latestAii!==null?data.latestAii.toFixed(1)+'%':'—'}</b>
+    <span class="chip ${ragFor(data.latestAii).cls}" style="margin-left:6px;">${ragFor(data.latestAii).label}</span>
+    ${data.baseAii!==null ? ` · Baseline AII: <b>${data.baseAii.toFixed(1)}%</b>` : ''}
+  ` : `No assessments on record for this beneficiary yet.`;
+
+  if(data.periodsWithData.length){
+    document.getElementById('statDiagnostic').innerHTML = `
+      <table class="data-table"><thead><tr><th>Period</th><th>ERI</th><th>BHI</th><th>SRI</th><th>AII</th><th>RAG</th></tr></thead>
+      <tbody>${data.periodsWithData.map(p=>{
+        const r = data.recs[p];
+        const eri=indexPctForRecord(r,'ERI'), bhi=indexPctForRecord(r,'BHI'), sri=indexPctForRecord(r,'SRI');
+        const aii = computeAII(eri,bhi,sri);
+        return `<tr><td>${p}</td><td>${eri?eri.pct.toFixed(1)+'%':'—'}</td><td>${bhi?bhi.pct.toFixed(1)+'%':'—'}</td><td>${sri?sri.pct.toFixed(1)+'%':'—'}</td><td>${aii!==null?aii.toFixed(1)+'%':'—'}</td><td><span class="chip ${ragFor(aii).cls}">${ragFor(aii).label}</span></td></tr>`;
+      }).join('')}</tbody></table>`;
+  } else {
+    document.getElementById('statDiagnostic').innerHTML = `No diagnostic scores on record yet.`;
+  }
+
+  document.getElementById('statGrowth').innerHTML = data.periodsWithData.length ? `
+    Growth vs baseline: <b>${data.growth!==null?(data.growth>=0?'+':'')+data.growth.toFixed(1)+' pp':'—'}</b> ·
+    Risk flag: <span class="chip ${flagCls[data.flag]}">${data.flag}</span> ·
+    Recommended action: <b>${RECOMMENDED_ACTION[data.flag]}</b>
+  ` : `No diagnostic scores on record yet.`;
+
+  document.getElementById('statPeii').innerHTML = data.peiiRecs.length ? `
+    <table class="data-table"><thead><tr><th>Quarter</th><th>PEII %</th><th>Rating</th><th>Feedback</th></tr></thead>
+    <tbody>${data.peiiRecs.map(r=>`<tr><td>${r.quarter}</td><td>${r.pct!==null?r.pct.toFixed(1)+'%':'—'}</td><td><span class="chip ${PEII_RATING_CLS[ratingForPEII(r.pct)]}">${ratingForPEII(r.pct)}</span></td><td>${r.feedback||'<span class="empty-note">—</span>'}</td></tr>`).join('')}</tbody></table>
+  ` : `No PEII entries on record yet.`;
+}
+
+async function switchReportContext(){
+  const list = await loadBeneficiaryList();
+  populateSelect('reportBeneficiarySelect', list);
+  const name = document.getElementById('reportBeneficiarySelect').value;
+  if(!name) return;
+
+  const data = await gatherBeneficiaryData(name);
+  renderReportStats(data);
+
+  const rec = await loadNarrative(name);
+  document.getElementById('reportAssessorInput').value = rec ? (rec.assessor || '') : '';
+  document.getElementById('narrOverview').value = rec ? (rec.sections.overview || '') : '';
+  document.getElementById('narrDiagnostic').value = rec ? (rec.sections.diagnostic || '') : '';
+  document.getElementById('narrGrowth').value = rec ? (rec.sections.growth || '') : '';
+  document.getElementById('narrPeii').value = rec ? (rec.sections.peii || '') : '';
+  document.getElementById('narrOverall').value = rec ? (rec.sections.overall || '') : '';
+  document.getElementById('reportSavedNote').textContent = rec && rec.savedAt ? `Last saved ${new Date(rec.savedAt).toLocaleString()}` : '';
+}
+
+async function saveNarrativeReport(){
+  const name = document.getElementById('reportBeneficiarySelect').value;
+  if(!name){ showToast('Select a beneficiary first'); return; }
+  const record = {
+    beneficiary: name,
+    assessor: document.getElementById('reportAssessorInput').value.trim(),
+    sections: {
+      overview: document.getElementById('narrOverview').value,
+      diagnostic: document.getElementById('narrDiagnostic').value,
+      growth: document.getElementById('narrGrowth').value,
+      peii: document.getElementById('narrPeii').value,
+      overall: document.getElementById('narrOverall').value,
+    },
+    savedAt: new Date().toISOString(),
+  };
+  try{
+    await window.storage.set(narrativeKey(name), JSON.stringify(record));
+    showToast(`Saved report — ${name}`);
+    document.getElementById('reportSavedNote').textContent = `Last saved ${new Date(record.savedAt).toLocaleString()}`;
+  }catch(e){ showToast('Could not save — please try again'); }
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function paragraphs(text){
+  const t = (text||'').trim();
+  if(!t) return '<p class="np">No narrative provided for this section.</p>';
+  return t.split(/\n{2,}/).map(p => `<p>${escapeHtml(p).replace(/\n/g,'<br>')}</p>`).join('');
+}
+
+async function generatePrintableReport(){
+  const name = document.getElementById('reportBeneficiarySelect').value;
+  if(!name){ showToast('Select a beneficiary first'); return; }
+  const assessor = document.getElementById('reportAssessorInput').value.trim();
+  const data = await gatherBeneficiaryData(name);
+  const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
+  const logoSrc = document.querySelector('.emblem img').src;
+  const today = new Date().toLocaleDateString();
+
+  const diagTable = data.periodsWithData.length ? `
+    <table><thead><tr><th>Period</th><th>ERI</th><th>BHI</th><th>SRI</th><th>AII</th><th>RAG</th></tr></thead>
+    <tbody>${data.periodsWithData.map(p=>{
+      const r = data.recs[p];
+      const eri=indexPctForRecord(r,'ERI'), bhi=indexPctForRecord(r,'BHI'), sri=indexPctForRecord(r,'SRI');
+      const aii = computeAII(eri,bhi,sri);
+      return `<tr><td>${p}</td><td>${eri?eri.pct.toFixed(1)+'%':'—'}</td><td>${bhi?bhi.pct.toFixed(1)+'%':'—'}</td><td>${sri?sri.pct.toFixed(1)+'%':'—'}</td><td>${aii!==null?aii.toFixed(1)+'%':'—'}</td><td>${ragFor(aii).label}</td></tr>`;
+    }).join('')}</tbody></table>` : `<p class="np">No diagnostic scores on record.</p>`;
+
+  const peiiTable = data.peiiRecs.length ? `
+    <table><thead><tr><th>Quarter</th><th>PEII %</th><th>Rating</th><th>Feedback</th></tr></thead>
+    <tbody>${data.peiiRecs.map(r=>`<tr><td>${r.quarter}</td><td>${r.pct!==null?r.pct.toFixed(1)+'%':'—'}</td><td>${ratingForPEII(r.pct)}</td><td>${escapeHtml(r.feedback)||'—'}</td></tr>`).join('')}</tbody></table>` : `<p class="np">No PEII entries on record.</p>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(name)} — Impact Report</title>
+  <style>
+    body{font-family:Georgia,'Times New Roman',serif; color:#1A1A1A; max-width:760px; margin:40px auto; padding:0 20px; line-height:1.6;}
+    header{display:flex; align-items:center; gap:20px; border-bottom:3px solid #1A1A1A; padding-bottom:16px; margin-bottom:6px;}
+    header img{height:64px;}
+    h1{font-size:22px; margin:0 0 4px;}
+    .meta{font-size:12.5px; color:#555; margin-bottom:28px;}
+    h2{font-size:16px; border-bottom:1px solid #ccc; padding-bottom:4px; margin-top:32px;}
+    .stat{background:#F7F5F0; border:1px solid #E3DDCF; border-radius:6px; padding:10px 14px; font-size:12.5px; margin:10px 0;}
+    table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+    th,td{text-align:left; padding:5px 7px; border-bottom:1px solid #ddd;}
+    p{font-size:13.5px; margin:8px 0;}
+    p.np{font-style:italic; color:#888;}
+    footer{margin-top:40px; font-size:11px; color:#888; border-top:1px solid #ddd; padding-top:10px;}
+    @media print{ body{margin:0; max-width:none;} }
+  </style></head>
+  <body>
+    <header><img src="${logoSrc}" alt="logo"><div><h1>Beneficiary Impact Report</h1><div class="meta">${escapeHtml(name)} · Prepared by ${escapeHtml(assessor)||'—'} · ${today}</div></div></header>
+
+    <h2>1. Beneficiary Overview</h2>
+    <div class="stat">Latest period: <b>${data.latestP||'—'}</b> · AII: <b>${data.latestAii!==null?data.latestAii.toFixed(1)+'%':'—'}</b> (${ragFor(data.latestAii).label})${data.baseAii!==null?` · Baseline AII: <b>${data.baseAii.toFixed(1)}%</b>`:''}</div>
+    ${paragraphs(document.getElementById('narrOverview').value)}
+
+    <h2>2. Diagnostic Assessment Findings</h2>
+    <div class="stat">${diagTable}</div>
+    ${paragraphs(document.getElementById('narrDiagnostic').value)}
+
+    <h2>3. Growth, Risk &amp; Recommended Action</h2>
+    <div class="stat">Growth vs baseline: <b>${data.growth!==null?(data.growth>=0?'+':'')+data.growth.toFixed(1)+' pp':'—'}</b> · Risk flag: <b>${data.flag}</b> · Recommended action: <b>${RECOMMENDED_ACTION[data.flag]}</b></div>
+    ${paragraphs(document.getElementById('narrGrowth').value)}
+
+    <h2>4. Programme Experience (PEII)</h2>
+    <div class="stat">${peiiTable}</div>
+    ${paragraphs(document.getElementById('narrPeii').value)}
+
+    <h2>5. Overall Conclusion &amp; Recommendations</h2>
+    ${paragraphs(document.getElementById('narrOverall').value)}
+
+    <footer>Generated by the CIMP Measurement &amp; Assessment Tool — Angels Resource Centres.</footer>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  if(!w){ showToast('Please allow pop-ups to print the report'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => { w.focus(); w.print(); };
+  setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 400);
+}
+
+/* ============================ EXPORT ============================ */
+
+function buildExportTSV(){
+  const programme = document.getElementById('programmeInput').value.trim() || 'Scatec';
+  const cohort = document.getElementById('cohortInput').value.trim() || 'Cohort 1';
+  const rows = Object.entries(scores).map(([code, val]) => {
+    return [programme, cohort, currentPeriod, currentBeneficiary, code, val].join('\t');
+  });
+  return rows.join('\n');
+}
+
+/* ============================ MISC UI ============================ */
+
+let toastTimer = null;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove('show'), 2400);
+}
+
+/* ============================ INIT ============================ */
+
+async function init(){
+  buildQuestionArea();
+
+  const list = await loadBeneficiaryList();
+  populateBeneficiarySelect(list);
+
+  document.getElementById('beneficiarySelect').addEventListener('change', switchContext);
+  document.getElementById('periodSelect').addEventListener('change', switchContext);
+
+  document.getElementById('addBeneficiaryBtn').addEventListener('click', () => {
+    document.getElementById('newBeneficiaryRow').classList.add('show');
+  });
+  document.getElementById('cancelNewBeneficiary').addEventListener('click', () => {
+    document.getElementById('newBeneficiaryRow').classList.remove('show');
+    document.getElementById('newBeneficiaryInput').value = '';
+  });
+  document.getElementById('confirmNewBeneficiary').addEventListener('click', async () => {
+    const name = document.getElementById('newBeneficiaryInput').value.trim();
+    if(!name) return;
+    const current = await loadBeneficiaryList();
+    if(!current.includes(name)){
+      current.push(name);
+      await saveBeneficiaryList(current);
+    }
+    populateBeneficiarySelect(current);
+    document.getElementById('beneficiarySelect').value = name;
+    document.getElementById('newBeneficiaryRow').classList.remove('show');
+    document.getElementById('newBeneficiaryInput').value = '';
+    await switchContext();
+    showToast(`Added ${name}`);
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', saveAssessment);
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    scores = {};
+    refreshAllScaleUI();
+    recompute();
+    showToast('Scores cleared (not yet saved)');
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const tsv = buildExportTSV();
+    document.getElementById('exportText').value = tsv || '(No scores entered yet)';
+    document.getElementById('exportModal').classList.add('show');
+  });
+  document.getElementById('closeExportBtn').addEventListener('click', () => {
+    document.getElementById('exportModal').classList.remove('show');
+  });
+  document.getElementById('copyExportBtn').addEventListener('click', async () => {
+    const text = document.getElementById('exportText').value;
+    try{
+      await navigator.clipboard.writeText(text);
+      showToast('Copied to clipboard');
+    }catch(e){
+      showToast('Could not copy — select and copy manually');
+    }
+  });
+
+  document.getElementById('tabBtnCollect').addEventListener('click', () => switchTab('collect'));
+  document.getElementById('tabBtnMonitor').addEventListener('click', () => switchTab('monitor'));
+  document.getElementById('tabBtnProfile').addEventListener('click', () => switchTab('profile'));
+  document.getElementById('tabBtnPeii').addEventListener('click', () => switchTab('peii'));
+  document.getElementById('tabBtnReport').addEventListener('click', () => switchTab('report'));
+  document.getElementById('tabBtnSponsors').addEventListener('click', () => switchTab('sponsors'));
+  document.getElementById('jrSaveBtn').addEventListener('click', saveJR);
+  document.getElementById('loadSeedBtn').addEventListener('click', loadHistoricalSeed);
+
+  document.getElementById('addSponsorBtn').addEventListener('click', addSponsor);
+  document.getElementById('allocateCohortBtn').addEventListener('click', allocateCohort);
+  document.getElementById('programmeInput').addEventListener('input', renderSponsorHint);
+  document.getElementById('cohortInput').addEventListener('input', renderSponsorHint);
+
+  populateSelect('profileBeneficiarySelect', list);
+  document.getElementById('profileBeneficiarySelect').addEventListener('change', renderProfile);
+
+  populateSelect('reportBeneficiarySelect', list);
+  document.getElementById('reportBeneficiarySelect').addEventListener('change', switchReportContext);
+  document.getElementById('reportSaveBtn').addEventListener('click', saveNarrativeReport);
+  document.getElementById('reportPrintBtn').addEventListener('click', generatePrintableReport);
+
+  buildPeiiDimArea();
+  populateSelect('peiiBeneficiarySelect', list);
+  document.getElementById('peiiBeneficiarySelect').addEventListener('change', switchPeiiContext);
+  document.getElementById('peiiQuarterSelect').addEventListener('change', switchPeiiContext);
+  document.getElementById('peiiSaveBtn').addEventListener('click', savePEII);
+  document.getElementById('peiiClearBtn').addEventListener('click', () => {
+    peiiDims = {};
+    document.getElementById('peiiFeedback').value = '';
+    refreshPeiiDimUI();
+    recomputePeiiSidebar();
+    showToast('Cleared (not yet saved)');
+  });
+
+  await switchContext();
+  await renderHistory();
+  await renderSponsorHint();
+}
+
+init();
+</script>
+</body>
+</html>
