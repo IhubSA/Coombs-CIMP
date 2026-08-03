@@ -1252,7 +1252,8 @@ async function saveBeneficiaryList(list){
     const rows = list.map(name => ({ name }));
     const { error } = await db.from('beneficiaries').upsert(rows, { onConflict: 'name', ignoreDuplicates: true });
     if(error) throw error;
-  }catch(e){ console.error('Failed to save beneficiary list', e); }
+    return true;
+  }catch(e){ console.error('Failed to save beneficiary list', e); showToast('Could not save — please try again'); return false; }
 }
 
 function populateBeneficiarySelect(list){
@@ -1638,7 +1639,8 @@ async function saveSponsors(list){
       const { error: upErr } = await db.from('sponsors').upsert(rows, { onConflict: 'id' });
       if(upErr) throw upErr;
     }
-  }catch(e){ console.error('Failed to save sponsor list', e); showToast('Could not save sponsor — please try again'); }
+    return true;
+  }catch(e){ console.error('Failed to save sponsor list', e); showToast('Could not save sponsor — please try again'); return false; }
 }
 
 async function loadCohortMap(){
@@ -1671,7 +1673,8 @@ async function saveCohortMap(map){
       const { error: upErr } = await db.from('cohort_sponsors').upsert(rows, { onConflict: 'programme,cohort' });
       if(upErr) throw upErr;
     }
-  }catch(e){ console.error('Failed to save cohort allocations', e); showToast('Could not save allocation — please try again'); }
+    return true;
+  }catch(e){ console.error('Failed to save cohort allocations', e); showToast('Could not save allocation — please try again'); return false; }
 }
 
 // Reads the distinct Programme/Cohort combinations already used in saved
@@ -1701,7 +1704,8 @@ async function addSponsor(){
   };
   const list = await loadSponsors();
   list.push(sponsor);
-  await saveSponsors(list);
+  const ok = await saveSponsors(list);
+  if(!ok) return;
   document.getElementById('sponsorNameInput').value = '';
   document.getElementById('sponsorContactInput').value = '';
   document.getElementById('sponsorEmailInput').value = '';
@@ -1714,7 +1718,8 @@ async function deleteSponsor(id){
   const list = await loadSponsors();
   const sponsor = list.find(s => s.id === id);
   const remaining = list.filter(s => s.id !== id);
-  await saveSponsors(remaining);
+  const ok = await saveSponsors(remaining);
+  if(!ok) return;
   // unassign any cohorts pointed at this sponsor
   const map = await loadCohortMap();
   let changed = false;
@@ -1732,7 +1737,8 @@ async function allocateCohort(){
   if(!sponsorId){ showToast('Select a sponsor to allocate to'); return; }
   const map = await loadCohortMap();
   map[cohortMapKey(programme, cohort)] = sponsorId;
-  await saveCohortMap(map);
+  const ok = await saveCohortMap(map);
+  if(!ok) return;
   document.getElementById('allocCohortInput').value = '';
   showToast(`Allocated ${programme} — ${cohort}`);
   await renderSponsorPortal();
@@ -1742,7 +1748,8 @@ async function allocateCohort(){
 async function unassignCohort(key){
   const map = await loadCohortMap();
   delete map[key];
-  await saveCohortMap(map);
+  const ok = await saveCohortMap(map);
+  if(!ok) return;
   showToast('Cohort unassigned');
   await renderSponsorPortal();
   await renderSponsorHint();
