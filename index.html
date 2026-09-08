@@ -470,7 +470,8 @@
   </div>
 
   <div class="tabnav">
-    <button id="tabBtnCollect" class="active">Collect data</button>
+    <button id="tabBtnDashboard" class="active">Dashboard</button>
+    <button id="tabBtnCollect">Collect data</button>
     <button id="tabBtnMonitor">Monitor cohort</button>
     <button id="tabBtnProfile">Beneficiary profile</button>
     <button id="tabBtnPeii">Programme experience (PEII)</button>
@@ -480,7 +481,33 @@
     <button id="tabBtnInterns">Intern survey</button>
   </div>
 
-  <div id="view-collect">
+  <div id="view-dashboard">
+    <div class="card">
+      <div class="section-title">Programme snapshot</div>
+      <div class="kpi-row" id="dashKpiRow"></div>
+    </div>
+
+    <div class="monitor-grid">
+      <div class="card">
+        <div class="section-title">Diagnostic assessments by period</div>
+        <div class="chart-wrap"><canvas id="dashDiagnosticChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="section-title">Enterprise survey completion by period</div>
+        <div class="chart-wrap"><canvas id="dashEnterpriseChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title">Recent activity across all sections</div>
+      <table class="data-table" id="dashActivityTable">
+        <thead><tr><th>Section</th><th>Who / what</th><th>When</th></tr></thead>
+        <tbody><tr><td colspan="3" class="empty-note">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div><!-- /view-dashboard -->
+
+  <div id="view-collect" style="display:none">
 
   <div class="setup" id="setupBar">
     <div class="field">
@@ -1828,14 +1855,15 @@ async function renderJR(){
 }
 
 function switchTab(tab){
-  const views = { collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors', enterprise:'view-enterprise', interns:'view-interns' };
-  const btns = { collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors', enterprise:'tabBtnEnterprise', interns:'tabBtnInterns' };
+  const views = { dashboard:'view-dashboard', collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors', enterprise:'view-enterprise', interns:'view-interns' };
+  const btns = { dashboard:'tabBtnDashboard', collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors', enterprise:'tabBtnEnterprise', interns:'tabBtnInterns' };
   Object.entries(views).forEach(([key, id]) => {
     document.getElementById(id).style.display = (key === tab) ? '' : 'none';
   });
   Object.entries(btns).forEach(([key, id]) => {
     document.getElementById(id).classList.toggle('active', key === tab);
   });
+  if(tab === 'dashboard'){ renderDashboard(); }
   if(tab === 'monitor'){ renderMonitor(); renderJR(); }
   if(tab === 'profile'){ renderProfile(); }
   if(tab === 'peii'){ switchPeiiContext(); renderPeiiSummary(); }
@@ -2079,6 +2107,122 @@ async function renderSponsorHint(){
   hintEl.innerHTML = sponsor
     ? `<span class="chip chip-green">Sponsored</span> ${programme} — ${cohort} is backed by <b>${sponsor.name}</b>.`
     : `<span class="chip chip-grey">No sponsor allocated</span> for ${programme} — ${cohort}. Allocate one in the Client portal tab.`;
+}
+
+/* ============================ DASHBOARD ============================ */
+
+async function countRows(table){
+  try{
+    const { count, error } = await db.from(table).select('*', { count: 'exact', head: true });
+    if(error) throw error;
+    return count || 0;
+  }catch(e){ console.error(`Failed to count ${table}`, e); return 0; }
+}
+
+async function groupByPeriod(table, periods){
+  try{
+    const { data, error } = await db.from(table).select('period');
+    if(error) throw error;
+    const counts = {};
+    periods.forEach(p => counts[p] = 0);
+    (data || []).forEach(row => { if(counts[row.period] !== undefined) counts[row.period]++; });
+    return counts;
+  }catch(e){ console.error(`Failed to group ${table} by period`, e); return {}; }
+}
+
+let dashDiagnosticChartInstance = null;
+let dashEnterpriseChartInstance = null;
+
+async function renderDashboard(){
+  const kpiRow = document.getElementById('dashKpiRow');
+  kpiRow.innerHTML = `<div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-label">Loading…</div></div>`;
+
+  const [
+    beneficiaryCount, sponsorCount, cohortAllocCount, internCount,
+    assessmentCount, enterpriseSurveyCount, peiiCount, internVisitCount,
+    demographicCount, narrativeCount, jrCount,
+  ] = await Promise.all([
+    countRows('beneficiaries'), countRows('sponsors'), countRows('cohort_sponsors'), countRows('interns'),
+    countRows('assessments'), countRows('enterprise_survey_responses'), countRows('peii_entries'), countRows('intern_site_visits'),
+    countRows('enterprise_demographics'), countRows('narrative_reports'), countRows('jobs_revenue'),
+  ]);
+
+  kpiRow.innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Beneficiaries</div><div class="kpi-value">${beneficiaryCount}</div><div class="kpi-sub">in the roster</div></div>
+    <div class="kpi-card"><div class="kpi-label">Interns</div><div class="kpi-value">${internCount}</div><div class="kpi-sub">${internVisitCount} site visit${internVisitCount===1?'':'s'} logged</div></div>
+    <div class="kpi-card"><div class="kpi-label">Sponsor clients</div><div class="kpi-value">${sponsorCount}</div><div class="kpi-sub">${cohortAllocCount} cohort${cohortAllocCount===1?'':'s'} allocated</div></div>
+    <div class="kpi-card"><div class="kpi-label">Diagnostic assessments</div><div class="kpi-value">${assessmentCount}</div><div class="kpi-sub">Collect data (ERI/BHI/SRI)</div></div>
+    <div class="kpi-card"><div class="kpi-label">Enterprise surveys</div><div class="kpi-value">${enterpriseSurveyCount}</div><div class="kpi-sub">${demographicCount} demographic intake${demographicCount===1?'':'s'}</div></div>
+    <div class="kpi-card"><div class="kpi-label">PEII entries</div><div class="kpi-value">${peiiCount}</div><div class="kpi-sub">programme experience</div></div>
+    <div class="kpi-card"><div class="kpi-label">Narrative reports</div><div class="kpi-value">${narrativeCount}</div><div class="kpi-sub">written up</div></div>
+    <div class="kpi-card"><div class="kpi-label">Jobs & revenue periods</div><div class="kpi-value">${jrCount}</div><div class="kpi-sub">logged</div></div>
+  `;
+
+  // Diagnostic assessments by period (Collect Data)
+  const diagPeriods = PERIOD_ORDER;
+  const diagCounts = await groupByPeriod('assessments', diagPeriods);
+  if(dashDiagnosticChartInstance) dashDiagnosticChartInstance.destroy();
+  dashDiagnosticChartInstance = new Chart(document.getElementById('dashDiagnosticChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: diagPeriods,
+      datasets: [{ label: 'Assessments saved', data: diagPeriods.map(p => diagCounts[p] || 0), backgroundColor: '#5b7a63' }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } },
+  });
+
+  // Enterprise survey completion by period
+  const entPeriods = ['Baseline','Q1','Q2','Q3','Q4'];
+  const entCounts = await groupByPeriod('enterprise_survey_responses', entPeriods);
+  if(dashEnterpriseChartInstance) dashEnterpriseChartInstance.destroy();
+  dashEnterpriseChartInstance = new Chart(document.getElementById('dashEnterpriseChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: entPeriods,
+      datasets: [{ label: 'Surveys completed', data: entPeriods.map(p => entCounts[p] || 0), backgroundColor: '#A8823C' }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } },
+  });
+
+  await renderDashboardActivity();
+}
+
+async function renderDashboardActivity(){
+  const tbody = document.querySelector('#dashActivityTable tbody');
+  try{
+    const [assess, entSurv, peii, visits, narratives, demos, sponsorsRecent] = await Promise.all([
+      db.from('assessments').select('beneficiary,period,saved_at').order('saved_at', { ascending: false }).limit(5),
+      db.from('enterprise_survey_responses').select('beneficiary,period,saved_at').order('saved_at', { ascending: false }).limit(5),
+      db.from('peii_entries').select('beneficiary,quarter,saved_at').order('saved_at', { ascending: false }).limit(5),
+      db.from('intern_site_visits').select('intern_name,visit_date,saved_at').order('saved_at', { ascending: false }).limit(5),
+      db.from('narrative_reports').select('beneficiary,saved_at').order('saved_at', { ascending: false }).limit(5),
+      db.from('enterprise_demographics').select('beneficiary,saved_at').order('saved_at', { ascending: false }).limit(5),
+      db.from('sponsors').select('name,created_at').order('created_at', { ascending: false }).limit(5),
+    ]);
+
+    const rows = [];
+    (assess.data || []).forEach(r => rows.push({ section: 'Collect data', who: `${r.beneficiary} — ${r.period}`, when: r.saved_at }));
+    (entSurv.data || []).forEach(r => rows.push({ section: 'Enterprise survey', who: `${r.beneficiary} — ${r.period}`, when: r.saved_at }));
+    (peii.data || []).forEach(r => rows.push({ section: 'PEII', who: `${r.beneficiary} — ${r.quarter}`, when: r.saved_at }));
+    (visits.data || []).forEach(r => rows.push({ section: 'Intern survey', who: `${r.intern_name}${r.visit_date ? ' — ' + r.visit_date : ''}`, when: r.saved_at }));
+    (narratives.data || []).forEach(r => rows.push({ section: 'Narrative report', who: r.beneficiary, when: r.saved_at }));
+    (demos.data || []).forEach(r => rows.push({ section: 'Enterprise demographic', who: r.beneficiary, when: r.saved_at }));
+    (sponsorsRecent.data || []).forEach(r => rows.push({ section: 'Client portal', who: `Sponsor added — ${r.name}`, when: r.created_at }));
+
+    rows.sort((a, b) => new Date(b.when) - new Date(a.when));
+    const top = rows.slice(0, 8);
+
+    if(top.length === 0){
+      tbody.innerHTML = '<tr><td colspan="3" class="empty-note">No activity recorded yet.</td></tr>';
+    } else {
+      tbody.innerHTML = top.map(r => `
+        <tr><td>${r.section}</td><td>${r.who}</td><td>${new Date(r.when).toLocaleString()}</td></tr>
+      `).join('');
+    }
+  }catch(e){
+    console.error('Failed to load dashboard activity', e);
+    tbody.innerHTML = '<tr><td colspan="3" class="empty-note">Could not load recent activity.</td></tr>';
+  }
 }
 
 /* ============================ ENTERPRISE SURVEY ============================ */
@@ -3469,6 +3613,7 @@ function bindStaticEventListeners(){
     }
   });
 
+  document.getElementById('tabBtnDashboard').addEventListener('click', () => switchTab('dashboard'));
   document.getElementById('tabBtnCollect').addEventListener('click', () => switchTab('collect'));
   document.getElementById('tabBtnMonitor').addEventListener('click', () => switchTab('monitor'));
   document.getElementById('tabBtnProfile').addEventListener('click', () => switchTab('profile'));
@@ -3565,6 +3710,7 @@ async function loadAppData(){
   await switchContext();
   await renderHistory();
   await renderSponsorHint();
+  await renderDashboard();
 }
 
 async function init(){
