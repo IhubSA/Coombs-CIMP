@@ -380,6 +380,54 @@
     background:none; border:none; color:var(--ink-soft); text-decoration:underline; cursor:pointer; font-size:12.5px; padding:0;
   }
   .user-bar button:hover{ color:var(--ink); }
+
+  /* ---------- Enterprise Survey & Intern Survey (shared) ---------- */
+  .subnav{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .subnav button{
+    padding:8px 16px; border-radius:8px; border:1px solid var(--sage-line); background:var(--sage);
+    font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-soft); cursor:pointer;
+  }
+  .subnav button.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+
+  .demo-section{ margin-bottom:22px; }
+  .demo-section-title{
+    font-family:'Playfair Display',serif; font-size:15px; color:var(--ink); margin-bottom:10px;
+    border-bottom:1px solid var(--sage-line); padding-bottom:6px;
+  }
+  .demo-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:700px){ .demo-grid{ grid-template-columns:1fr; } }
+  .demo-field{ margin-bottom:0; }
+  .demo-field.field-wide{ grid-column:1 / -1; }
+  .demo-field label{ display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; }
+  .demo-field input[type=text], .demo-field input[type=number], .demo-field select, .demo-field textarea{
+    width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--sage-line);
+    background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px; color:var(--ink);
+  }
+  .demo-field textarea{ min-height:70px; resize:vertical; }
+  .option-row{ display:flex; flex-wrap:wrap; gap:14px; }
+  .option-row label{
+    display:flex; align-items:center; gap:6px; font-size:13px; color:var(--ink); font-weight:normal;
+    margin-bottom:0; cursor:pointer;
+  }
+  .option-row input{ width:auto; }
+  .mini-scale{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  .mini-scale .scale button{ width:30px; height:30px; font-size:12px; }
+
+  .rating-table{ width:100%; border-collapse:collapse; margin-bottom:6px; }
+  .rating-table td{ padding:9px 6px; border-bottom:1px solid var(--sage-line); vertical-align:middle; }
+  .rating-table td.rt-statement{ font-size:13.5px; color:var(--ink); }
+  .rating-table td.rt-code{ display:block; font-size:10.5px; color:var(--ink-soft); margin-top:2px; }
+
+  .section-linked{ font-size:12px; color:var(--ink-soft); margin-bottom:4px; }
+  .section-objective{ font-size:12px; color:var(--ink-soft); font-style:italic; margin-bottom:12px; }
+  .conditional-block{
+    margin-top:10px; padding:12px 14px; background:var(--sage); border-radius:8px; border:1px dashed var(--sage-line);
+  }
+  .conditional-block .cb-label{ font-size:12px; font-weight:600; color:var(--ink-soft); margin-bottom:8px; }
+
+  .visit-history-item{
+    display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--sage-line); font-size:12.5px; color:var(--ink-soft);
+  }
 </style>
 </head>
 <body>
@@ -428,6 +476,8 @@
     <button id="tabBtnPeii">Programme experience (PEII)</button>
     <button id="tabBtnReport">Narrative report</button>
     <button id="tabBtnSponsors">Client portal</button>
+    <button id="tabBtnEnterprise">Enterprise survey</button>
+    <button id="tabBtnInterns">Intern survey</button>
   </div>
 
   <div id="view-collect">
@@ -776,6 +826,97 @@
     </div>
 
   </div><!-- /view-sponsors -->
+
+  <div id="view-enterprise" style="display:none">
+    <div class="card">
+      <div class="setup">
+        <div class="field">
+          <label for="entBeneficiarySelect">Beneficiary</label>
+          <select id="entBeneficiarySelect"></select>
+        </div>
+      </div>
+
+      <div class="subnav">
+        <button id="entSubBtnDemo" class="active">Demographic intake</button>
+        <button id="entSubBtnSurvey">ERI · BHI · SRI survey</button>
+      </div>
+
+      <div id="entSubDemo">
+        <p class="section-hint">Completed once during the onboarding workshop. Not diagnostic scores — used for context and reporting.</p>
+        <div id="demographicFormArea"></div>
+        <button class="btn btn-primary" id="demoSaveBtn" style="margin-top:10px;">Save demographic intake</button>
+        <span class="section-hint" id="demoSavedNote" style="display:block; margin-top:8px;"></span>
+      </div>
+
+      <div id="entSubSurvey" style="display:none">
+        <div class="setup" style="margin-bottom:16px;">
+          <div class="field">
+            <label for="entPeriodSelect">Period</label>
+            <select id="entPeriodSelect">
+              <option value="Baseline">Baseline</option>
+              <option value="Q1">Q1 — Immediate Outcomes</option>
+              <option value="Q2">Q2 — Early Stage Outcomes</option>
+              <option value="Q3">Q3 — Intermediate Outcomes</option>
+              <option value="Q4">Q4 — Endline</option>
+            </select>
+          </div>
+        </div>
+        <p class="section-hint">Score 1 = Strongly Disagree · Score 3 = Neutral · Score 5 = Strongly Agree.</p>
+        <div id="enterpriseSurveyArea"></div>
+        <button class="btn btn-primary" id="entSurveySaveBtn" style="margin-top:10px;">Save survey</button>
+        <span class="section-hint" id="entSurveySavedNote" style="display:block; margin-top:8px;"></span>
+      </div>
+    </div>
+  </div><!-- /view-enterprise -->
+
+  <div id="view-interns" style="display:none">
+    <div class="card">
+      <div class="section-title">Intern Site Visit M&amp;E Questionnaire</div>
+
+      <div class="setup">
+        <div class="field">
+          <label for="internSelect">Intern</label>
+          <select id="internSelect"></select>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="addInternBtn">+ Add intern</button>
+      </div>
+      <div class="new-beneficiary-row" id="newInternRow">
+        <input type="text" id="newInternName" placeholder="Intern full name" />
+        <select id="newInternStream">
+          <option value="">— Stream —</option>
+          <option value="Social Performance">Social Performance</option>
+          <option value="Community Development Practitioner">Community Development Practitioner</option>
+          <option value="Technical Operations">Technical Operations</option>
+        </select>
+        <input type="text" id="newInternHost" placeholder="Host site" />
+        <input type="text" id="newInternMentor" placeholder="Mentor/Supervisor" />
+        <button class="btn btn-primary btn-sm" id="confirmNewIntern">Add</button>
+        <button class="btn btn-ghost btn-sm" id="cancelNewIntern">Cancel</button>
+      </div>
+
+      <div class="demo-grid" style="margin-top:16px;">
+        <div class="demo-field">
+          <label for="internVisitDate">Date of site visit</label>
+          <input type="text" id="internVisitDate" placeholder="e.g. 2026-09-08" />
+        </div>
+        <div class="demo-field">
+          <label for="internMonthsInProgramme">Months in programme</label>
+          <input type="text" id="internMonthsInProgramme" placeholder="e.g. 6" />
+        </div>
+      </div>
+
+      <p class="section-hint" style="margin-top:14px;">5 = Strongly Agree · 4 = Agree · 3 = Neutral · 2 = Disagree · 1 = Strongly Disagree</p>
+      <div id="internQuestionnaireArea"></div>
+
+      <button class="btn btn-primary" id="internSaveBtn" style="margin-top:10px;">Save site visit</button>
+      <span class="section-hint" id="internSavedNote" style="display:block; margin-top:8px;"></span>
+
+      <div class="demo-section" style="margin-top:24px;">
+        <div class="demo-section-title">Previous site visits for this intern</div>
+        <div id="internVisitHistory"></div>
+      </div>
+    </div>
+  </div><!-- /view-interns -->
 
 </div>
 
@@ -1687,8 +1828,8 @@ async function renderJR(){
 }
 
 function switchTab(tab){
-  const views = { collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors' };
-  const btns = { collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors' };
+  const views = { collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors', enterprise:'view-enterprise', interns:'view-interns' };
+  const btns = { collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors', enterprise:'tabBtnEnterprise', interns:'tabBtnInterns' };
   Object.entries(views).forEach(([key, id]) => {
     document.getElementById(id).style.display = (key === tab) ? '' : 'none';
   });
@@ -1700,6 +1841,8 @@ function switchTab(tab){
   if(tab === 'peii'){ switchPeiiContext(); renderPeiiSummary(); }
   if(tab === 'report'){ switchReportContext(); }
   if(tab === 'sponsors'){ renderSponsorPortal(); }
+  if(tab === 'enterprise'){ switchEnterpriseContext(); }
+  if(tab === 'interns'){ renderInternVisitHistory(); }
 }
 
 /* ============================ CLIENT PORTAL / SPONSORS ============================ */
@@ -1938,7 +2081,814 @@ async function renderSponsorHint(){
     : `<span class="chip chip-grey">No sponsor allocated</span> for ${programme} — ${cohort}. Allocate one in the Client portal tab.`;
 }
 
-/* ============================ HISTORICAL SEED DATA ============================ */
+/* ============================ ENTERPRISE SURVEY ============================ */
+
+const ENTERPRISE_SURVEY_LIBRARY = {
+  Baseline: {
+    ERI: [
+      ["ERI_MIND1", "I am confident in my ability to run my business."],
+      ["ERI_MIND4", "I set business goals and work towards achieving them."],
+      ["ERI_KNOW1", "I understand my products or services clearly."],
+      ["ERI_KNOW2", "I understand who my customers are."],
+      ["ERI_FIN2", "I know my monthly revenue."],
+      ["ERI_FIN3", "I know my monthly expenses."],
+      ["ERI_FIN4", "I understand whether my business is making a profit."],
+      ["ERI_COMP1", "My business registration is complete or planned."],
+      ["ERI_PLAN1", "I have a business plan or development roadmap."],
+      ["ERI_PLAN2", "I have clear business growth goals."],
+      ["ERI_DIG1", "I use WhatsApp or digital communication for my business."],
+      ["ERI_DIG2", "I use social media to promote my business."],
+      ["ERI_DIG3", "I can create invoices or simple business documents"],
+    ],
+    BHI: [
+      ["BHI_REV4", "My business is generating regular income."],
+      ["BHI_MKT1", "My customer base is growing."],
+      ["BHI_REV1", "My sales are increasing."],
+      ["BHI_MKT2", "I receive repeat customers."],
+      ["BHI_OPS1", "I have enough equipment/resources/ stock."],
+      ["SRI_OPS5", "I can identify business risks."],
+      ["SRI_GROW1", "I am prepared to manage business growth"],
+    ],
+    SRI: [
+      ["SRI_GROW1", "I plan for future business growth."],
+      ["SRI_GROW5", "I can adapt when business conditions change."],
+      ["SRI_LEAD5", "I actively look for ways to improve my business."],
+      ["BHI_EMP1", "My business creates employment or income opportunities."],
+      ["BHI_EMP3", "I support local suppliers where possible."],
+      ["SRI_LEAD4", "I value customer and community relationships. \\"],
+    ],
+  },
+  Q1: {
+    ERI: [
+      ["ERI_MIND1", "My confidence in running my business has improved."],
+      ["ERI_MIND2", "I am better able to solve business problems."],
+      ["ERI_MIND3", "I actively look for more business opportunities."],
+      ["ERI_MIND4", "I set clearer business goals and work towards them."],
+      ["ERI_KNOW1", "My understanding of my products or services has improved."],
+      ["ERI_KNOW2", "I understand my customers better than before."],
+      ["ERI_KNOW3", "My understanding of pricing and costing has improved."],
+      ["ERI_KNOW4", "I understand my competitors better."],
+      ["ERI_KNOW5", "My marketing knowledge has improved."],
+      ["ERI_FIN1", "I keep better financial records than when I started."],
+      ["ERI_FIN2", "I know my monthly business income more accurately."],
+      ["ERI_FIN3", "I monitor my monthly business expenses regularly."],
+      ["ERI_FIN4", "I have a better understanding of my business profitability."],
+      ["ERI_FIN5", "I keep my business finances separate from my personal finances."],
+      ["ERI_COMP1", "My business compliance has improved."],
+      ["ERI_COMP2", "My business banking arrangements are now well organised."],
+      ["ERI_COMP3", "I better understand licences, permits and legal requirements."],
+      ["ERI_COMP4", "My understanding of tax responsibilities has improved."],
+      ["ERI_COMP5", "I now keep my business records in an organised manner."],
+      ["ERI_PLAN1", "My business plan is guiding my business decisions."],
+      ["ERI_PLAN2", "My business growth goals are becoming clearer."],
+      ["ERI_PLAN3", "I regularly review my progress against my goals."],
+      ["ERI_PLAN4", "I have identified the resources needed to grow my business."],
+      ["ERI_PLAN5", "I can identify new business opportunities more easily."],
+      ["ERI_DIG1", "I use digital communication more effectively for my business."],
+      ["ERI_DIG2", "I use social media more effectively to market my business."],
+      ["ERI_DIG3", "I can prepare business documents independently."],
+      ["ERI_DIG4", "I use digital tools to manage my business records."],
+      ["ERI_DIG5", "I communicate professionally with customers online. Send out Month 4, Week 2:\\"],
+    ],
+    BHI: [
+      ["BHI_REV1", "My business income has improved since joining the programme."],
+      ["BHI_CUS1", "My customer base has grown."],
+      ["BHI_REV2", "My sales have increased."],
+      ["BHI_CUS2", "I have more repeat customers."],
+      ["BHI_FIN1", "My business is becoming financially stronger."],
+      ["BHI_OPS1", "My daily business operations run more efficiently."],
+      ["BHI_OPS2", "I have improved the equipment or resources available to my business."],
+      ["BHI_OPS3", "I deliver products or services more consistently."],
+      ["BHI_OPS4", "I manage stock or supplies more effectively."],
+      ["BHI_OPS5", "My time management has improved."],
+      ["BHI_MGT1", "I use business information to make better decisions."],
+      ["BHI_MGT2", "I review my business performance regularly."],
+      ["BHI_MGT3", "I can identify and manage business risks."],
+      ["BHI_MGT4", "I have improved the way I manage my customers."],
+      ["BHI_MGT5", "My business is becoming better organised for growth. Send out Month 4, Week 3:\\"],
+    ],
+    SRI: [
+      ["SRI_SUS1", "My business is becoming more sustainable."],
+      ["SRI_RES1", "I am better able to adapt to business challenges."],
+      ["SRI_SUS2", "I am planning for long-term business growth."],
+      ["SRI_SUS3", "I continuously improve the way I operate my business."],
+      ["SRI_RES2", "I feel more confident that my business can succeed independently."],
+      ["SRI_SOC1", "My business contributes more positively to my community."],
+      ["SRI_SOC2", "My business creates more economic opportunities for others."],
+      ["SRI_SOC3", "I support local businesses whenever possible."],
+      ["SRI_SOC4", "I operate my business ethically."],
+      ["SRI_SOC5", "My relationships with customers have improved. [\\ ]{.underline}"],
+    ],
+  },
+  Q2: {
+    ERI: [
+      ["ERI_MIND1", "I confidently make business decisions without relying heavily on others."],
+      ["ERI_MIND2", "I solve business challenges effectively as they arise."],
+      ["ERI_MIND3", "I actively pursue new business opportunities."],
+      ["ERI_MIND4", "I regularly review and update my business goals."],
+      ["ERI_MIND5", "I make informed business decisions after considering risks."],
+      ["ERI_KNOW1", "I apply my understanding of my products or services to improve my business."],
+      ["ERI_KNOW2", "I regularly engage with my customers to understand their needs."],
+      ["ERI_KNOW3", "I use pricing and costing information when making business decisions."],
+      ["ERI_KNOW4", "I monitor what my competitors are doing."],
+      ["ERI_KNOW5", "I actively use marketing techniques to attract customers."],
+      ["ERI_FIN1", "I consistently keep accurate financial records."],
+      ["ERI_FIN2", "I monitor my monthly income."],
+      ["ERI_FIN3", "I monitor my monthly expenses."],
+      ["ERI_FIN4", "I use profit information to improve my business."],
+      ["ERI_FIN5", "I consistently separate business and personal finances."],
+      ["ERI_COMP1", "My business compliance requirements are up to date"],
+      ["ERI_COMP2", "My business banking is managed effectively."],
+      ["ERI_COMP3", "I comply with the legal requirements for my business."],
+      ["ERI_COMP4", "I understand and manage my tax responsibilities."],
+      ["ERI_COMP5", "My business records are organised and easy to access."],
+      ["ERI_PLAN1", "I regularly use my business plan to guide my decisions."],
+      ["ERI_PLAN2", "I have achieved progress towards my business growth goals."],
+      ["ERI_PLAN3", "I monitor my business performance using measurable indicators."],
+      ["ERI_PLAN4", "I actively secure the resources needed to grow my business."],
+      ["ERI_PLAN5", "I regularly identify and evaluate new business opportunities."],
+      ["ERI_DIG1", "I use digital communication to strengthen customer relationships."],
+      ["ERI_DIG2", "I regularly use social media or digital marketing to promote my business."],
+      ["ERI_DIG3", "I prepare business documents confidently using digital tools."],
+      ["ERI_DIG4", "I use spreadsheets or digital systems to manage my business."],
+      ["ERI_DIG5", "I maintain a professional online presence. Send out Month 7, Week 2:\\"],
+    ],
+    BHI: [
+      ["BHI_REV1", "My business income is steadily increasing."],
+      ["BHI_CUS1", "My customer base continues to grow."],
+      ["BHI_REV2", "My monthly sales have increased."],
+      ["BHI_CUS2", "My customers regularly return to my business."],
+      ["BHI_FIN1", "My business finances are improving."],
+      ["BHI_OPS1", "My business operations have become more efficient."],
+      ["BHI_OPS2", "I have sufficient equipment and resources to operate effectively."],
+      ["BHI_OPS3", "I consistently deliver quality products or services."],
+      ["BHI_OPS4", "I effectively manage my stock or materials."],
+      ["BHI_OPS5", "I use my time efficiently to achieve business goals."],
+      ["BHI_MGT1", "I make informed business decisions using business information."],
+      ["BHI_MGT2", "I review my business performance every month."],
+      ["BHI_MGT3", "I actively identify and manage business risks."],
+      ["BHI_MGT4", "I maintain good customer management systems."],
+      ["BHI_MGT5", "My business is becoming more structured and organised. Send out Month 7, Week 3:\\"],
+    ],
+    SRI: [
+      ["SRI_SUS1", "My business is becoming more financially sustainable."],
+      ["SRI_RES1", "I adapt quickly when circumstances change."],
+      ["SRI_SUS2", "I have a clear long-term vision for my business."],
+      ["SRI_SUS3", "I continuously improve the way my business operates."],
+      ["SRI_RES2", "I am becoming less dependent on external support."],
+      ["SRI_SOC1", "My business creates value within my community."],
+      ["SRI_SOC2", "My business contributes to local economic development."],
+      ["SRI_SOC3", "I actively support other local businesses where possible."],
+      ["SRI_SOC4", "My business is recognised for operating ethically."],
+      ["SRI_SOC5", "I have built stronger relationships with customers and stakeholders"],
+    ],
+  },
+  Q3: {
+    ERI: [
+      ["ERI_MIND1", "I make confident business decisions independently."],
+      ["ERI_MIND2", "I overcome business challenges with effective solutions."],
+      ["ERI_MIND3", "I actively pursue and secure new business opportunities."],
+      ["ERI_MIND4", "I consistently achieve the business goals I set for myself."],
+      ["ERI_MIND5", "I carefully evaluate risks before making important business decisions."],
+      ["ERI_KNOW1", "I use my business knowledge to improve the quality of my products or services."],
+      ["ERI_KNOW2", "I understand changing customer needs and respond accordingly."],
+      ["ERI_KNOW3", "I regularly review my pricing to remain competitive and profitable."],
+      ["ERI_KNOW4", "I monitor competitors and adapt my business accordingly."],
+      ["ERI_KNOW5", "My marketing activities are generating new business opportunities."],
+      ["ERI_FIN1", "My financial records are accurate and up to date."],
+      ["ERI_FIN2", "I know my monthly income without needing to estimate."],
+      ["ERI_FIN3", "I actively manage and control my monthly expenses."],
+      ["ERI_FIN4", "I use profit information to guide business decisions."],
+      ["ERI_FIN5", "I consistently manage business finances separately from personal finances."],
+      ["ERI_COMP1", "My business complies with all relevant legal requirements."],
+      ["ERI_COMP2", "My banking and financial administration are well managed."],
+      ["ERI_COMP3", "I understand and maintain all required permits or licences."],
+      ["ERI_COMP4", "My tax obligations are managed appropriately."],
+      ["ERI_COMP5", "My business records are complete, organised and secure."],
+      ["ERI_PLAN1", "My business plan continues to guide my business growth."],
+      ["ERI_PLAN2", "I am achieving the business growth targets I established earlier in the programme."],
+      ["ERI_PLAN3", "I use business performance information to improve my business."],
+      ["ERI_PLAN4", "I have secured resources that support business growth."],
+      ["ERI_PLAN5", "I have successfully developed new business opportunities."],
+      ["ERI_DIG1", "Digital communication plays an important role in my business success."],
+      ["ERI_DIG2", "I use digital marketing regularly to attract customers."],
+      ["ERI_DIG3", "I confidently produce professional business documents."],
+      ["ERI_DIG4", "I use digital tools to monitor and manage business performance."],
+      ["ERI_DIG5", "My online communication reflects a professional business image. Send out Month 10, Week 2:\\"],
+    ],
+    BHI: [
+      ["BHI_REV1", "My business income has increased consistently over the past three months."],
+      ["BHI_CUS1", "My customer base continues to expand."],
+      ["BHI_REV2", "My monthly sales continue to improve."],
+      ["BHI_CUS2", "I have built a loyal base of repeat customers."],
+      ["BHI_FIN1", "My business is financially healthier than it was at the start of the programme."],
+      ["BHI_OPS1", "My business operations run efficiently with minimal disruptions."],
+      ["BHI_OPS2", "I have the equipment and resources required to operate effectively."],
+      ["BHI_OPS3", "I consistently deliver quality products or services."],
+      ["BHI_OPS4", "My stock or inventory is well managed."],
+      ["BHI_OPS5", "I effectively manage my workload and business priorities."],
+      ["BHI_MGT1", "I use business information to make strategic decisions."],
+      ["BHI_MGT2", "I monitor my business performance using measurable indicators."],
+      ["BHI_MGT3", "I proactively manage business risks."],
+      ["BHI_MGT4", "I maintain strong relationships with my customers."],
+      ["BHI_MGT5", "My business systems are well organised and support future growth. Send out Month 10, Week 3:\\"],
+    ],
+    SRI: [
+      ["SRI_SUS1", "My business is becoming financially sustainable."],
+      ["SRI_RES1", "I adapt successfully to changing business conditions."],
+      ["SRI_SUS2", "I am building a business that will continue to grow in the future."],
+      ["SRI_SUS3", "I continuously improve my products, services or operations."],
+      ["SRI_RES2", "I feel confident that my business can succeed beyond this programme."],
+      ["SRI_SOC1", "My business makes a positive contribution to my community."],
+      ["SRI_SOC2", "My business has created employment or income opportunities."],
+      ["SRI_SOC3", "I support local businesses and suppliers where possible."],
+      ["SRI_SOC4", "I operate my business responsibly and ethically."],
+      ["SRI_SOC5", "My reputation with customers and stakeholders has improved"],
+    ],
+  },
+  Q4: {
+    ERI: [
+      ["ERI_MIND1", "I am confident in my ability to manage and grow my business independently."],
+      ["ERI_MIND2", "I can solve business challenges without relying on external support."],
+      ["ERI_MIND3", "I actively identify and pursue new business opportunities."],
+      ["ERI_MIND4", "I consistently set and achieve business goals."],
+      ["ERI_MIND5", "I confidently make strategic business decisions after assessing risks."],
+      ["ERI_KNOW1", "I have the knowledge needed to operate my business successfully."],
+      ["ERI_KNOW2", "I understand my customers and how to meet their needs."],
+      ["ERI_KNOW3", "I confidently manage pricing and costing decisions."],
+      ["ERI_KNOW4", "I understand my competitors and adapt my business accordingly."],
+      ["ERI_KNOW5", "I effectively market my business to attract new customers."],
+      ["ERI_FIN1", "I consistently maintain accurate financial records."],
+      ["ERI_FIN2", "I know my business income and monitor it regularly."],
+      ["ERI_FIN3", "I effectively manage my business expenses."],
+      ["ERI_FIN4", "I use financial information to make informed business decisions."],
+      ["ERI_FIN5", "I consistently separate business and personal finances."],
+      ["ERI_COMP1", "My business complies with all relevant legal requirements."],
+      ["ERI_COMP2", "My business and financial administration are well organised."],
+      ["ERI_PLAN1", "My business has a clear growth strategy beyond this programme."],
+      ["ERI_PLAN2", "I have realistic growth targets for the next 12 months."],
+      ["ERI_PLAN3", "I regularly monitor my business performance and make improvements."],
+      ["ERI_PLAN4", "I know how to access the resources needed for future growth."],
+      ["ERI_PLAN5", "I continuously identify new opportunities for my business."],
+      ["ERI_DIG1", "Digital communication is now part of my daily business operations."],
+      ["ERI_DIG2", "I effectively use digital marketing to attract customers."],
+      ["ERI_DIG3", "I confidently prepare professional business documents."],
+      ["ERI_DIG4", "I use digital systems to manage my business information."],
+      ["ERI_DIG5", "My online business presence supports business growth. Send out Month 12/13, Week 2:\\"],
+    ],
+    BHI: [
+      ["BHI_REV1", "My business generates sustainable income."],
+      ["BHI_CUS1", "My customer base has grown significantly during the programme."],
+      ["BHI_REV2", "My sales have improved compared with when I joined the programme."],
+      ["BHI_CUS2", "I have a strong base of repeat customers."],
+      ["BHI_FIN1", "My business is financially healthier than when I joined the programme."],
+      ["BHI_OPS1", "My business operates efficiently on a day-to-day basis."],
+      ["BHI_OPS2", "I have the equipment and resources needed to operate successfully."],
+      ["BHI_OPS3", "I consistently deliver quality products or services."],
+      ["BHI_OPS4", "My operational systems support continued business growth."],
+      ["BHI_OPS5", "I manage my business time effectively."],
+      ["BHI_MGT1", "I make strategic decisions using business information."],
+      ["BHI_MGT2", "I regularly review business performance and adjust where necessary."],
+      ["BHI_MGT3", "I actively manage business risks."],
+      ["BHI_MGT4", "I have effective systems for managing customers and suppliers."],
+      ["BHI_MGT5", "My business is well positioned for future growth. Send out Month 12/13, Week 3:\\"],
+    ],
+    SRI: [
+      ["SRI_SUS1", "My business can continue operating successfully without programme support."],
+      ["SRI_RES1", "I can adapt my business to changing market conditions."],
+      ["SRI_SUS2", "I have a clear long-term vision for my business."],
+      ["SRI_SUS3", "I continuously improve my business to remain competitive."],
+      ["SRI_RES2", "I am confident in the long-term sustainability of my business."],
+      ["SRI_SOC1", "My business makes a positive contribution to my community."],
+      ["SRI_SOC2", "My business creates employment or income opportunities for others."],
+      ["SRI_SOC3", "I actively support local suppliers and businesses."],
+      ["SRI_SOC4", "My business operates ethically and responsibly."],
+      ["SRI_SOC5", "My business has earned the trust of customers and the community"],
+    ],
+  },
+};
+const DEMOGRAPHIC_FIELDS = [
+  { section: "Personal Details", fields: [
+    { id: "full_name", label: "Full name and surname (as per ID)", type: "text" },
+    { id: "id_number", label: "ID Number", type: "text" },
+    { id: "id_document_ref", label: "ID document (reference / filed separately)", type: "text" },
+    { id: "age", label: "Age", type: "number" },
+    { id: "gender", label: "Gender", type: "radio", options: ["Male", "Female"] },
+    { id: "town", label: "Which town do you live in?", type: "text" },
+    { id: "phone", label: "Phone number", type: "text" },
+    { id: "whatsapp", label: "WhatsApp number (if different)", type: "text" },
+    { id: "email", label: "Email address", type: "text" },
+    { id: "education", label: "Highest Education Level", type: "radio", options: ["No formal schooling", "Primary", "Secondary", "Tertiary"] },
+  ]},
+  { section: "Business Experience", fields: [
+    { id: "prior_experience", label: "Do you have any prior business experience?", type: "radio", options: ["Yes", "No"] },
+    { id: "experience_years", label: "If yes — number of years of experience", type: "text" },
+    { id: "experience_type", label: "If yes — type of experience (e.g. retail, agriculture, services, informal trading, manufacturing, etc.)", type: "text" },
+  ]},
+  { section: "Business Category & Industry", fields: [
+    { id: "business_category", label: "If you look at the definitions below, please select the category your business is in at this moment in time", type: "radio", options: ["Idea Stage", "Survivalist Enterprise", "Informal SMME", "Sole Proprietor", "Micro Enterprise", "Small Enterprise", "Medium Enterprise"] },
+    { id: "industry", label: "Please select the industry of your business at this moment in time", type: "select", options: [
+      "Agriculture, Farming & Agri-Processing", "Food & Catering", "Retail & Trading", "Beauty, Hair & Personal Care",
+      "Construction & Building Services", "Trades & Technical Services", "Waste Management & Recycling",
+      "Arts, Crafts & Creative Industries", "Transport & Logistics", "Tourism, Hospitality & Events",
+      "ICT & Digital Services", "Education, Training & Youth Development", "Health, Wellness & Community Services",
+      "Professional & Business Services", "Cleaning & Property Services", "Renewable Energy & Environmental Services",
+      "General Services", "Manufacturing & Production", "Other",
+    ]},
+  ]},
+  { section: "Business Status", fields: [
+    { id: "compliance", label: "Is your business compliant? (Select all that apply)", type: "checkboxes", options: ["CIPC registered", "BBEE Certificate/Affidavit", "Tax Clearance Certificate", "Other"] },
+    { id: "compliance_docs_ref", label: "Compliance documents (reference / filed separately)", type: "text" },
+  ]},
+  { section: "Business Revenue", fields: [
+    { id: "monthly_revenue", label: "What is your current monthly revenue (in Rands)?", type: "number" },
+    { id: "challenges", label: "What challenges do you currently face? (Select all that apply)", type: "checkboxes", options: [
+      "Limited financial management skills", "Compliance or registration challenges", "Limited access to markets",
+      "Low or inconsistent revenue", "Lack of equipment or tools", "Limited business planning skills", "Other",
+    ]},
+  ]},
+  { section: "Employment Baseline", fields: [
+    { id: "ft_total", label: "How many people currently work full-time in your business (including yourself)?", type: "number" },
+    { id: "ft_black", label: "How many of the above are Black?", type: "number" },
+    { id: "ft_women", label: "How many of the above are women?", type: "number" },
+    { id: "ft_youth", label: "How many of the above are youth?", type: "number" },
+    { id: "pt_total", label: "How many people currently work part-time in your business (including yourself)?", type: "number" },
+    { id: "pt_black", label: "How many of the above are Black?", type: "number" },
+    { id: "pt_women", label: "How many of the above are women?", type: "number" },
+    { id: "pt_youth", label: "How many of the above are youth?", type: "number" },
+  ]},
+  { section: "Business Skills & Confidence (1 = Poor, 5 = Excellent)", fields: [
+    { id: "skill_financial", label: "Financial management skills", type: "scale" },
+    { id: "skill_marketing", label: "Marketing & sales skills", type: "scale" },
+    { id: "skill_compliance", label: "Compliance/legal knowledge", type: "scale" },
+    { id: "skill_planning", label: "Business planning and growth strategy", type: "scale" },
+  ]},
+  { section: "Expectations of the Programme", fields: [
+    { id: "expect_achieve", label: "What do you hope to achieve during this programme?", type: "textarea" },
+    { id: "expect_priorities", label: "What are your top three priority areas for growth?", type: "textarea" },
+  ]},
+  { section: "Consent", fields: [
+    { id: "consent_marketing", label: "Do you consent to Coombs Consulting using your photos and/or videos for marketing and social media purposes?", type: "radio", options: ["Yes", "No"] },
+    { id: "consent_travel", label: "I hereby confirm that I voluntarily participate in this programme and acknowledge that I might be required to travel for certain activities. I indemnify Coombs Consulting and its appointed service providers from any claims for damage, injury, or loss that may occur during any travel as part of the programme.", type: "radio", options: ["I Agree", "I Disagree"] },
+    { id: "consent_popia", label: "As a participant in programmes hosted by Coombs Consulting, I understand that my personal information may be collected and used for training, administration, identity verification, reporting, communication and research purposes.", type: "radio", options: ["Yes", "No"] },
+    { id: "declaration", label: "I confirm that the information provided is accurate to the best of my knowledge and may be used for programme monitoring and reporting.", type: "radio", options: ["Yes", "No"] },
+  ]},
+];
+
+let demographicAnswers = {};
+let enterpriseSurveyScores = {};
+
+function fieldControlHtml(field, value){
+  const v = value === undefined || value === null ? '' : value;
+  if(field.type === 'text' || field.type === 'number'){
+    return `<input type="${field.type}" data-demo-field="${field.id}" value="${(v+'').replace(/"/g,'&quot;')}" />`;
+  }
+  if(field.type === 'textarea'){
+    return `<textarea data-demo-field="${field.id}">${(v+'')}</textarea>`;
+  }
+  if(field.type === 'radio'){
+    return `<div class="option-row">${field.options.map(opt => `
+      <label><input type="radio" name="demo_${field.id}" data-demo-field="${field.id}" value="${opt}" ${v===opt?'checked':''}/> ${opt}</label>
+    `).join('')}</div>`;
+  }
+  if(field.type === 'select'){
+    return `<select data-demo-field="${field.id}"><option value="">— Select —</option>${field.options.map(opt => `<option value="${opt}" ${v===opt?'selected':''}>${opt}</option>`).join('')}</select>`;
+  }
+  if(field.type === 'checkboxes'){
+    const arr = Array.isArray(v) ? v : [];
+    return `<div class="option-row">${field.options.map(opt => `
+      <label><input type="checkbox" data-demo-field="${field.id}" value="${opt}" ${arr.includes(opt)?'checked':''}/> ${opt}</label>
+    `).join('')}</div>`;
+  }
+  if(field.type === 'scale'){
+    return `<div class="scale mini-scale" data-demo-field="${field.id}">
+      ${[1,2,3,4,5].map(n => `<button type="button" data-val="${n}" class="${Number(v)===n?'sel':''}">${n}</button>`).join('')}
+    </div>`;
+  }
+  return '';
+}
+
+function buildDemographicForm(){
+  const area = document.getElementById('demographicFormArea');
+  area.innerHTML = DEMOGRAPHIC_FIELDS.map(section => `
+    <div class="demo-section">
+      <div class="demo-section-title">${section.section}</div>
+      <div class="demo-grid">
+        ${section.fields.map(f => `
+          <div class="demo-field ${f.type==='textarea'||f.type==='checkboxes'?'field-wide':''}">
+            <label>${f.label}</label>
+            ${fieldControlHtml(f, demographicAnswers[f.id])}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  area.querySelectorAll('[data-demo-field]').forEach(el => {
+    if(el.classList.contains('scale')){
+      el.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = el.getAttribute('data-demo-field');
+          const val = parseInt(btn.getAttribute('data-val'), 10);
+          demographicAnswers[id] = (demographicAnswers[id] === val) ? undefined : val;
+          buildDemographicForm();
+        });
+      });
+      return;
+    }
+    el.addEventListener('change', () => {
+      const id = el.getAttribute('data-demo-field');
+      const field = DEMOGRAPHIC_FIELDS.flatMap(s => s.fields).find(f => f.id === id);
+      if(field.type === 'checkboxes'){
+        const checked = Array.from(area.querySelectorAll(`[data-demo-field="${id}"]:checked`)).map(c => c.value);
+        demographicAnswers[id] = checked;
+      } else {
+        demographicAnswers[id] = el.value;
+      }
+    });
+  });
+}
+
+async function loadDemographic(beneficiary){
+  try{
+    const { data, error } = await db.from('enterprise_demographics').select('*').eq('beneficiary', beneficiary).maybeSingle();
+    if(error) throw error;
+    return data ? { data: data.data || {}, savedAt: data.saved_at } : null;
+  }catch(e){ console.error('Failed to load demographic intake', e); return null; }
+}
+
+async function saveDemographic(){
+  const beneficiary = document.getElementById('entBeneficiarySelect').value;
+  if(!beneficiary){ showToast('Select a beneficiary first'); return; }
+  try{
+    const row = { beneficiary, data: demographicAnswers, saved_at: new Date().toISOString() };
+    const { error } = await db.from('enterprise_demographics').upsert(row, { onConflict: 'beneficiary' });
+    if(error) throw error;
+    showToast(`Saved demographic intake — ${beneficiary}`);
+    document.getElementById('demoSavedNote').textContent = `Last saved ${new Date(row.saved_at).toLocaleString()}`;
+  }catch(e){ console.error(e); showToast('Could not save — please try again'); }
+}
+
+function buildEnterpriseSurveyArea(period){
+  const lib = ENTERPRISE_SURVEY_LIBRARY[period];
+  const area = document.getElementById('enterpriseSurveyArea');
+  area.innerHTML = ['ERI','BHI','SRI'].map(idx => {
+    const items = lib[idx] || [];
+    const label = idx === 'ERI' ? 'Entrepreneur Readiness Index' : idx === 'BHI' ? 'Business Health Index' : 'Sustainability & Resilience Index';
+    return `
+      <div class="index-block">
+        <div class="index-head open" data-static="1">
+          <div class="index-head-left">
+            <span class="index-tag tag-${idx}">${idx}</span>
+            <div><h2>${label}</h2><div class="sub">${items.length} items</div></div>
+          </div>
+        </div>
+        <div class="index-body show">
+          <div class="domain-group">
+            ${items.map(([code, text]) => `
+              <div class="q-row">
+                <div><div class="q-text">${text}</div><span class="q-code">${code}</span></div>
+                <div class="scale" data-code="${code}">
+                  ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}" class="${enterpriseSurveyScores[code]===v?'sel':''}">${v}</button>`).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  area.querySelectorAll('.scale button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.parentElement.getAttribute('data-code');
+      const val = parseInt(btn.getAttribute('data-val'), 10);
+      enterpriseSurveyScores[code] = (enterpriseSurveyScores[code] === val) ? undefined : val;
+      buildEnterpriseSurveyArea(period);
+    });
+  });
+}
+
+async function loadEnterpriseSurvey(beneficiary, period){
+  try{
+    const { data, error } = await db.from('enterprise_survey_responses').select('*')
+      .eq('beneficiary', beneficiary).eq('period', period).maybeSingle();
+    if(error) throw error;
+    return data ? { scores: data.scores || {}, savedAt: data.saved_at } : null;
+  }catch(e){ console.error('Failed to load enterprise survey', e); return null; }
+}
+
+async function saveEnterpriseSurvey(){
+  const beneficiary = document.getElementById('entBeneficiarySelect').value;
+  const period = document.getElementById('entPeriodSelect').value;
+  if(!beneficiary){ showToast('Select a beneficiary first'); return; }
+  try{
+    const row = { beneficiary, period, scores: enterpriseSurveyScores, saved_at: new Date().toISOString() };
+    const { error } = await db.from('enterprise_survey_responses').upsert(row, { onConflict: 'beneficiary,period' });
+    if(error) throw error;
+    showToast(`Saved ${period} survey — ${beneficiary}`);
+    document.getElementById('entSurveySavedNote').textContent = `Last saved ${new Date(row.saved_at).toLocaleString()}`;
+  }catch(e){ console.error(e); showToast('Could not save — please try again'); }
+}
+
+async function switchEnterpriseContext(){
+  const beneficiary = document.getElementById('entBeneficiarySelect').value;
+  if(!beneficiary) return;
+
+  const demo = await loadDemographic(beneficiary);
+  demographicAnswers = demo ? demo.data : {};
+  buildDemographicForm();
+  document.getElementById('demoSavedNote').textContent = demo ? `Last saved ${new Date(demo.savedAt).toLocaleString()}` : 'Not yet completed for this beneficiary.';
+
+  const period = document.getElementById('entPeriodSelect').value;
+  const survey = await loadEnterpriseSurvey(beneficiary, period);
+  enterpriseSurveyScores = survey ? survey.scores : {};
+  buildEnterpriseSurveyArea(period);
+  document.getElementById('entSurveySavedNote').textContent = survey ? `Last saved ${new Date(survey.savedAt).toLocaleString()}` : 'Not yet completed for this period.';
+}
+
+function switchEnterpriseSubview(which){
+  document.getElementById('entSubDemo').style.display = which === 'demo' ? '' : 'none';
+  document.getElementById('entSubSurvey').style.display = which === 'survey' ? '' : 'none';
+  document.getElementById('entSubBtnDemo').classList.toggle('active', which === 'demo');
+  document.getElementById('entSubBtnSurvey').classList.toggle('active', which === 'survey');
+}
+
+/* ============================ INTERN SURVEY ============================ */
+
+const INTERN_QUESTIONNAIRE = [
+  {
+    id: "s1", title: "Section 1: Recruitment, Onboarding & Induction",
+    linked: "Recruitment, onboarding, contracts, induction and systems orientation.",
+    objective: "Assess onboarding and workplace integration.",
+    statements: [
+      ["s1_1", "The recruitment process was fair and transparent."],
+      ["s1_2", "I received sufficient information before starting my internship."],
+      ["s1_3", "My contract and internship expectations were clearly explained."],
+      ["s1_4", "I received a proper induction into the company and site."],
+      ["s1_5", "I understand the reporting lines between Anthem/EIMS and Angels."],
+      ["s1_6", "I understand company policies and procedures."],
+    ],
+    openQuestions: [
+      ["s1_open1", "What additional support would have improved your onboarding?"],
+      ["s1_open2", "Were there any challenges during induction?"],
+    ],
+  },
+  {
+    id: "s2", title: "Section 2: Health, Safety & Site Readiness",
+    linked: "Medicals, HSE induction and PPE provision.",
+    objective: "Monitor HSE compliance.",
+    statements: [
+      ["s2_1", "I completed all required HSE inductions."],
+      ["s2_2", "I understand the site's safety procedures."],
+      ["s2_3", "I have access to appropriate PPE when required."],
+      ["s2_4", "I feel safe in my work environment."],
+      ["s2_5", "I know how to report safety incidents or concerns."],
+    ],
+    openQuestions: [
+      ["s2_open1", "Have you experienced any health or safety concerns?"],
+    ],
+  },
+  {
+    id: "s3", title: "Section 3: Training & Competency Development",
+    linked: "Competencies and technical milestones.",
+    objective: "Assess achievement of internship milestones.",
+    statements: [
+      ["s3_1", "The internship is developing my professional skills."],
+      ["s3_2", "I have improved my business writing and communication skills."],
+      ["s3_3", "My Microsoft Office skills have improved."],
+      ["s3_4", "I understand company systems and procedures."],
+      ["s3_5", "I am gaining practical experience relevant to my career goals."],
+    ],
+    conditionalStatements: {
+      label: "For Social Performance Interns only",
+      items: [
+        ["s3_sp1", "I understand SED and EnD project implementation."],
+        ["s3_sp2", "I understand how grievances and complaints are managed."],
+        ["s3_sp3", "I have participated in community engagement activities."],
+      ],
+    },
+  },
+  {
+    id: "s4", title: "Section 4: Mentorship & Psychosocial Support",
+    linked: "Monthly psychosocial support and coaching.",
+    objective: "Monitor intern wellbeing and support.",
+    statements: [
+      ["s4_1", "I receive regular mentoring or coaching support."],
+      ["s4_2", "The psychosocial sessions have been helpful."],
+      ["s4_3", "I feel supported in managing stress and work-life balance."],
+      ["s4_4", "I know who to contact when I need support."],
+      ["s4_5", "The internship supports my personal growth."],
+    ],
+    wellbeingCheck: ["Excellent", "Good", "Fair", "Poor", "Very Poor"],
+    openQuestions: [
+      ["s4_open1", "What additional support would help you succeed?"],
+    ],
+  },
+  {
+    id: "s5", title: "Section 5: Performance & Work Experience",
+    linked: "Quarterly performance reviews.",
+    objective: "Assess work performance and integration.",
+    statements: [
+      ["s5_1", "I receive clear work instructions from my supervisor."],
+      ["s5_2", "I receive regular feedback on my performance."],
+      ["s5_3", "I am given meaningful tasks and responsibilities."],
+      ["s5_4", "I feel included as part of the team."],
+      ["s5_5", "My workload is manageable."],
+    ],
+    openQuestions: [
+      ["s5_open1", "What has been your greatest achievement so far?"],
+    ],
+  },
+  {
+    id: "s6", title: "Section 6: Administration & HR Support",
+    linked: "HR, payroll and grievance management.",
+    objective: "Assess HR and payroll services.",
+    statements: [
+      ["s6_1", "Leave processes are easy to understand."],
+      ["s6_2", "Payroll and remuneration are managed accurately and on time."],
+      ["s6_3", "Communication from Angels HR is clear and timely."],
+      ["s6_4", "I understand grievance procedures."],
+      ["s6_5", "Administrative support is responsive when needed."],
+    ],
+  },
+  {
+    id: "s7", title: "Section 7: Career Readiness & Exit Strategy",
+    linked: "Employment facilitation and career development.",
+    objective: "Measure readiness for employment.",
+    statements: [
+      ["s7_1", "I have received support to improve my CV."],
+      ["s7_2", "I have participated in mock interviews."],
+      ["s7_3", "I have developed or updated my LinkedIn profile."],
+      ["s7_4", "I feel more employable because of this programme."],
+      ["s7_5", "I am aware of employment opportunities in my field."],
+    ],
+    openQuestions: [
+      ["s7_open1", "What type of employment are you seeking after the internship?"],
+      ["s7_open2", "What support do you need to secure employment?"],
+    ],
+  },
+  {
+    id: "s8", title: "Section 8: Overall Experience",
+    statements: [
+      ["s8_1", "Overall, I am satisfied with the internship programme."],
+      ["s8_2", "I would recommend this internship to others."],
+      ["s8_3", "I would consider future employment within the renewable energy sector."],
+    ],
+  },
+];
+
+let internStatementScores = {};
+
+async function loadInterns(){
+  try{
+    const { data, error } = await db.from('interns').select('*').order('name');
+    if(error) throw error;
+    return data || [];
+  }catch(e){ console.error('Failed to load interns', e); return []; }
+}
+
+async function saveIntern(intern){
+  try{
+    const { error } = await db.from('interns').upsert(intern, { onConflict: 'name' });
+    if(error) throw error;
+    return true;
+  }catch(e){ console.error('Failed to save intern', e); showToast('Could not save intern — please try again'); return false; }
+}
+
+function populateInternSelect(interns){
+  const sel = document.getElementById('internSelect');
+  const prev = sel.value;
+  sel.innerHTML = interns.map(i => `<option value="${i.name}">${i.name}</option>`).join('');
+  if(interns.some(i => i.name === prev)) sel.value = prev;
+}
+
+function buildInternQuestionnaire(){
+  const area = document.getElementById('internQuestionnaireArea');
+  area.innerHTML = INTERN_QUESTIONNAIRE.map(section => `
+    <div class="demo-section">
+      <div class="demo-section-title">${section.title}</div>
+      ${section.linked ? `<div class="section-linked"><b>Linked:</b> ${section.linked}</div>` : ''}
+      ${section.objective ? `<div class="section-objective">${section.objective}</div>` : ''}
+      <table class="rating-table">
+        ${section.statements.map(([code, text]) => `
+          <tr>
+            <td class="rt-statement">${text}</td>
+            <td>
+              <div class="scale mini-scale" data-code="${code}">
+                ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}" class="${internStatementScores[code]===v?'sel':''}">${v}</button>`).join('')}
+              </div>
+            </td>
+          </tr>
+        `).join('')}
+      </table>
+      ${section.conditionalStatements ? `
+        <div class="conditional-block">
+          <div class="cb-label">${section.conditionalStatements.label}</div>
+          <table class="rating-table">
+            ${section.conditionalStatements.items.map(([code, text]) => `
+              <tr>
+                <td class="rt-statement">${text}</td>
+                <td>
+                  <div class="scale mini-scale" data-code="${code}">
+                    ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}" class="${internStatementScores[code]===v?'sel':''}">${v}</button>`).join('')}
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      ` : ''}
+      ${section.wellbeingCheck ? `
+        <div class="demo-field" style="margin-top:10px;">
+          <label>Wellbeing Check: How would you rate your current wellbeing?</label>
+          <div class="option-row">
+            ${section.wellbeingCheck.map(opt => `
+              <label><input type="radio" name="wellbeing" data-wellbeing-opt="${opt}" ${internOpenAnswers.wellbeing===opt?'checked':''}/> ${opt}</label>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      ${(section.openQuestions||[]).map(([code, text]) => `
+        <div class="demo-field field-wide" style="margin-top:10px;">
+          <label>${text}</label>
+          <textarea data-open-field="${code}">${internOpenAnswers[code] || ''}</textarea>
+        </div>
+      `).join('')}
+      <div class="demo-field field-wide" style="margin-top:10px;">
+        <label>General Feedback</label>
+        <textarea data-open-field="feedback_${section.id}">${internOpenAnswers['feedback_'+section.id] || ''}</textarea>
+      </div>
+    </div>
+  `).join('');
+
+  area.querySelectorAll('.scale button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const code = btn.parentElement.getAttribute('data-code');
+      const val = parseInt(btn.getAttribute('data-val'), 10);
+      internStatementScores[code] = (internStatementScores[code] === val) ? undefined : val;
+      buildInternQuestionnaire();
+    });
+  });
+  area.querySelectorAll('[data-wellbeing-opt]').forEach(el => {
+    el.addEventListener('change', () => { internOpenAnswers.wellbeing = el.getAttribute('data-wellbeing-opt'); });
+  });
+  area.querySelectorAll('[data-open-field]').forEach(el => {
+    el.addEventListener('input', () => { internOpenAnswers[el.getAttribute('data-open-field')] = el.value; });
+  });
+}
+
+let internOpenAnswers = {};
+
+async function loadInternVisitHistory(internName){
+  try{
+    const { data, error } = await db.from('intern_site_visits').select('*')
+      .eq('intern_name', internName).order('saved_at', { ascending: false });
+    if(error) throw error;
+    return data || [];
+  }catch(e){ console.error('Failed to load visit history', e); return []; }
+}
+
+async function renderInternVisitHistory(){
+  const internName = document.getElementById('internSelect').value;
+  const box = document.getElementById('internVisitHistory');
+  if(!internName){ box.innerHTML = '<div class="empty-note">Select an intern.</div>'; return; }
+  const visits = await loadInternVisitHistory(internName);
+  if(visits.length === 0){ box.innerHTML = '<div class="empty-note">No site visits logged yet.</div>'; return; }
+  box.innerHTML = visits.map(v => `
+    <div class="visit-history-item">
+      <span>${v.visit_date || '(no date)'} — ${v.months_in_programme ? v.months_in_programme + ' months in programme' : ''}</span>
+      <span>Saved ${new Date(v.saved_at).toLocaleDateString()}</span>
+    </div>
+  `).join('');
+}
+
+async function saveInternVisit(){
+  const internName = document.getElementById('internSelect').value;
+  if(!internName){ showToast('Select or add an intern first'); return; }
+  try{
+    const row = {
+      intern_name: internName,
+      visit_date: document.getElementById('internVisitDate').value.trim() || null,
+      months_in_programme: document.getElementById('internMonthsInProgramme').value.trim() || null,
+      statements: internStatementScores,
+      wellbeing: internOpenAnswers.wellbeing || null,
+      open_answers: internOpenAnswers,
+      general_feedback: null,
+      saved_at: new Date().toISOString(),
+    };
+    const { error } = await db.from('intern_site_visits').insert(row);
+    if(error) throw error;
+    showToast(`Saved site visit — ${internName}`);
+    document.getElementById('internSavedNote').textContent = `Last saved ${new Date(row.saved_at).toLocaleString()}`;
+    internStatementScores = {};
+    internOpenAnswers = {};
+    document.getElementById('internVisitDate').value = '';
+    document.getElementById('internMonthsInProgramme').value = '';
+    buildInternQuestionnaire();
+    await renderInternVisitHistory();
+  }catch(e){ console.error(e); showToast('Could not save — please try again'); }
+}
 
 async function loadHistoricalSeed(){
   let added = 0, skipped = 0;
@@ -2525,6 +3475,8 @@ function bindStaticEventListeners(){
   document.getElementById('tabBtnPeii').addEventListener('click', () => switchTab('peii'));
   document.getElementById('tabBtnReport').addEventListener('click', () => switchTab('report'));
   document.getElementById('tabBtnSponsors').addEventListener('click', () => switchTab('sponsors'));
+  document.getElementById('tabBtnEnterprise').addEventListener('click', () => switchTab('enterprise'));
+  document.getElementById('tabBtnInterns').addEventListener('click', () => switchTab('interns'));
   document.getElementById('jrSaveBtn').addEventListener('click', saveJR);
   document.getElementById('loadSeedBtn').addEventListener('click', loadHistoricalSeed);
 
@@ -2549,6 +3501,51 @@ function bindStaticEventListeners(){
     recomputePeiiSidebar();
     showToast('Cleared (not yet saved)');
   });
+
+  // Enterprise survey
+  document.getElementById('entSubBtnDemo').addEventListener('click', () => switchEnterpriseSubview('demo'));
+  document.getElementById('entSubBtnSurvey').addEventListener('click', () => switchEnterpriseSubview('survey'));
+  document.getElementById('entBeneficiarySelect').addEventListener('change', switchEnterpriseContext);
+  document.getElementById('entPeriodSelect').addEventListener('change', switchEnterpriseContext);
+  document.getElementById('demoSaveBtn').addEventListener('click', saveDemographic);
+  document.getElementById('entSurveySaveBtn').addEventListener('click', saveEnterpriseSurvey);
+
+  // Intern survey
+  document.getElementById('addInternBtn').addEventListener('click', () => {
+    document.getElementById('newInternRow').classList.add('show');
+  });
+  document.getElementById('cancelNewIntern').addEventListener('click', () => {
+    document.getElementById('newInternRow').classList.remove('show');
+  });
+  document.getElementById('confirmNewIntern').addEventListener('click', async () => {
+    const name = document.getElementById('newInternName').value.trim();
+    if(!name){ showToast('Enter the intern\'s name'); return; }
+    const intern = {
+      name,
+      stream: document.getElementById('newInternStream').value,
+      host_site: document.getElementById('newInternHost').value.trim(),
+      mentor: document.getElementById('newInternMentor').value.trim(),
+    };
+    const ok = await saveIntern(intern);
+    if(!ok) return;
+    const interns = await loadInterns();
+    populateInternSelect(interns);
+    document.getElementById('internSelect').value = name;
+    document.getElementById('newInternRow').classList.remove('show');
+    document.getElementById('newInternName').value = '';
+    document.getElementById('newInternHost').value = '';
+    document.getElementById('newInternMentor').value = '';
+    showToast(`Added intern — ${name}`);
+    await renderInternVisitHistory();
+  });
+  document.getElementById('internSelect').addEventListener('change', async () => {
+    internStatementScores = {};
+    internOpenAnswers = {};
+    buildInternQuestionnaire();
+    document.getElementById('internSavedNote').textContent = '';
+    await renderInternVisitHistory();
+  });
+  document.getElementById('internSaveBtn').addEventListener('click', saveInternVisit);
 }
 
 // Runs once, right after a session is confirmed — loads everything that
@@ -2559,6 +3556,11 @@ async function loadAppData(){
   populateSelect('profileBeneficiarySelect', list);
   populateSelect('reportBeneficiarySelect', list);
   populateSelect('peiiBeneficiarySelect', list);
+  populateSelect('entBeneficiarySelect', list);
+
+  const interns = await loadInterns();
+  populateInternSelect(interns);
+  buildInternQuestionnaire();
 
   await switchContext();
   await renderHistory();
