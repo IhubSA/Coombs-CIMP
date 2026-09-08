@@ -794,14 +794,14 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ============================ SUPABASE (Coombs Consulting DB) ============================ */
+/* ============================ SUPABASE (Coombs CIMP DB) ============================ */
 
-const SUPABASE_URL = 'https://ziladpnlfajtiboavwvn.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_9PPylQ1CDhMUvQFuE3nW3Q__pTIhYjb';
+const SUPABASE_URL = 'https://xjnfxodvibmzukllbbrk.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_4n9gYBx7GiqxmqQz09xdmQ_O51xPUuc';
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-// All app tables live in the coombs_measurement schema (kept separate from
-// other apps sharing this Supabase project).
-const db = sbClient.schema('coombs_measurement');
+// This is a dedicated project (Coombs CIMP) — tables live in the default
+// "public" schema, which Supabase exposes automatically.
+const db = sbClient;
 
 let dbReady = false;
 
