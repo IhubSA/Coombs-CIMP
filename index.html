@@ -1557,6 +1557,7 @@ let scores = {};             // { QUESTION_CODE: 1-5 }
 let currentBeneficiary = null;
 let currentPeriod = "Baseline";
 let baselineAIICache = null; // {aii} for currently selected beneficiary
+let beneficiaryMeta = {};    // { name: {programme, cohort} } — populated by loadBeneficiaryList(); null programme/cohort means legacy/manually-added
 
 const TOTAL_QUESTIONS = Object.values(QUESTION_LIBRARY)
   .reduce((sum, idx) => sum + Object.values(idx.domains).reduce((s,arr)=>s+arr.length,0), 0);
@@ -1776,15 +1777,19 @@ function recompute(){
 
 async function loadBeneficiaryList(){
   let list = [...DEFAULT_BENEFICIARIES];
+  beneficiaryMeta = {};
   try{
-    const { data, error } = await db.from('beneficiaries').select('name').order('name');
+    const { data, error } = await db.from('beneficiaries').select('name,programme,cohort').order('name');
     if(error) throw error;
     if(data){
       // Seed the DB with the built-in defaults the first time it's empty.
       if(data.length === 0 && DEFAULT_BENEFICIARIES.length){
         await saveBeneficiaryList(DEFAULT_BENEFICIARIES);
       } else {
-        data.forEach(row => { if(!list.includes(row.name)) list.push(row.name); });
+        data.forEach(row => {
+          if(!list.includes(row.name)) list.push(row.name);
+          beneficiaryMeta[row.name] = { programme: row.programme || null, cohort: row.cohort || null };
+        });
       }
     }
   }catch(e){ console.error('Failed to load beneficiary list', e); }
@@ -1860,6 +1865,17 @@ function indexPctForRecord(record, key){
 async function switchContext(){
   currentBeneficiary = document.getElementById('beneficiarySelect').value;
   currentPeriod = document.getElementById('periodSelect').value;
+
+  // Beneficiaries created through self-service signup carry their own
+  // programme/cohort (set from their invite) — pull those through so the
+  // admin doesn't have to re-type them, and so the saved assessment record
+  // ends up correctly attributed. Legacy/manually-added beneficiaries have
+  // no stored programme/cohort, so the fields are left as-is (manual entry).
+  const meta = beneficiaryMeta[currentBeneficiary];
+  if(meta && meta.programme) document.getElementById('programmeInput').value = meta.programme;
+  if(meta && meta.cohort) document.getElementById('cohortInput').value = meta.cohort;
+  if(meta && (meta.programme || meta.cohort)) await renderSponsorHint();
+
   const rec = await loadAssessment(currentBeneficiary, currentPeriod);
   scores = rec ? {...rec.scores} : {};
   refreshAllScaleUI();
