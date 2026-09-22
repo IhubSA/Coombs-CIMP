@@ -526,6 +526,7 @@
     <button id="tabBtnPeii">Programme experience (PEII)</button>
     <button id="tabBtnReport">Narrative report</button>
     <button id="tabBtnSponsors">Client portal</button>
+    <button id="tabBtnInvites">Beneficiary invites</button>
     <button id="tabBtnEnterprise">Enterprise survey</button>
     <button id="tabBtnInterns">Intern survey</button>
   </div>
@@ -846,6 +847,42 @@
       </div>
     </div>
   </div><!-- /view-report -->
+
+  <div id="view-invites" style="display:none">
+    <div class="card">
+      <div class="section-title">Invite a beneficiary</div>
+      <p class="section-hint">Creates a one-time sign-up link for a new beneficiary. They'll set their own password using this link, and the system will take them straight to the Demographic Intake to onboard themselves — you won't need to add their profile or survey answers yourself.</p>
+
+      <div class="sponsor-form">
+        <div class="field">
+          <label for="inviteNameInput">Beneficiary name</label>
+          <input type="text" id="inviteNameInput" placeholder="Full name" />
+        </div>
+        <div class="field">
+          <label for="invitePhoneInput">Phone number</label>
+          <input type="text" id="invitePhoneInput" placeholder="e.g. +27821234567" />
+        </div>
+        <div class="field">
+          <label for="inviteProgrammeInput">Programme</label>
+          <input type="text" id="inviteProgrammeInput" list="knownProgrammes" placeholder="e.g. Scatec" />
+        </div>
+        <div class="field">
+          <label for="inviteCohortInput">Cohort</label>
+          <input type="text" id="inviteCohortInput" list="knownCohorts" placeholder="e.g. Cohort 1" />
+        </div>
+        <div>
+          <button class="btn btn-primary btn-sm" id="createInviteBtn">Create invite</button>
+        </div>
+      </div>
+      <div id="inviteCreateResult"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title">Invites</div>
+      <p class="section-hint">Pending invites haven't been used yet — resend the link or SMS if a beneficiary hasn't signed up. Used invites show the account is active.</p>
+      <div id="inviteListArea"><div class="empty-note">No invites yet.</div></div>
+    </div>
+  </div><!-- /view-invites -->
 
   <div id="view-sponsors" style="display:none">
 
@@ -2005,8 +2042,8 @@ async function renderJR(){
 }
 
 function switchTab(tab){
-  const views = { dashboard:'view-dashboard', collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors', enterprise:'view-enterprise', interns:'view-interns' };
-  const btns = { dashboard:'tabBtnDashboard', collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors', enterprise:'tabBtnEnterprise', interns:'tabBtnInterns' };
+  const views = { dashboard:'view-dashboard', collect:'view-collect', monitor:'view-monitor', profile:'view-profile', peii:'view-peii', report:'view-report', sponsors:'view-sponsors', invites:'view-invites', enterprise:'view-enterprise', interns:'view-interns' };
+  const btns = { dashboard:'tabBtnDashboard', collect:'tabBtnCollect', monitor:'tabBtnMonitor', profile:'tabBtnProfile', peii:'tabBtnPeii', report:'tabBtnReport', sponsors:'tabBtnSponsors', invites:'tabBtnInvites', enterprise:'tabBtnEnterprise', interns:'tabBtnInterns' };
   Object.entries(views).forEach(([key, id]) => {
     document.getElementById(id).style.display = (key === tab) ? '' : 'none';
   });
@@ -2019,6 +2056,7 @@ function switchTab(tab){
   if(tab === 'peii'){ switchPeiiContext(); renderPeiiSummary(); }
   if(tab === 'report'){ switchReportContext(); }
   if(tab === 'sponsors'){ renderSponsorPortal(); }
+  if(tab === 'invites'){ renderInviteList(); }
   if(tab === 'enterprise'){ switchEnterpriseContext(); }
   if(tab === 'interns'){ renderInternVisitHistory(); }
 }
@@ -3883,6 +3921,7 @@ function bindStaticEventListeners(){
   document.getElementById('tabBtnPeii').addEventListener('click', () => switchTab('peii'));
   document.getElementById('tabBtnReport').addEventListener('click', () => switchTab('report'));
   document.getElementById('tabBtnSponsors').addEventListener('click', () => switchTab('sponsors'));
+  document.getElementById('tabBtnInvites').addEventListener('click', () => switchTab('invites'));
   document.getElementById('tabBtnEnterprise').addEventListener('click', () => switchTab('enterprise'));
   document.getElementById('tabBtnInterns').addEventListener('click', () => switchTab('interns'));
   document.getElementById('jrSaveBtn').addEventListener('click', saveJR);
