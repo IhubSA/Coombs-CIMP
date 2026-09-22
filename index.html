@@ -2387,8 +2387,8 @@ async function createInvite(){
       <div class="invite-row" style="margin-top:12px;">
         <div class="invite-meta">Invite created for <b>${escapeHtml(name)}</b>.<br>Link: <code style="font-size:11.5px;">${escapeHtml(link)}</code></div>
         <div class="invite-row-actions">
-          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText('${link}'); showToast('Link copied');">Copy link</button>
-          <button class="btn btn-primary btn-sm" type="button" onclick="sendInviteSms('${escapeHtml(phone)}','${escapeHtml(name)}','${link}')">Send SMS invite</button>
+          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText('${jsAttr(link)}'); showToast('Link copied');">Copy link</button>
+          <button class="btn btn-primary btn-sm" type="button" onclick="sendInviteSms('${jsAttr(phone)}','${jsAttr(name)}','${jsAttr(link)}')">Send SMS invite</button>
         </div>
       </div>`;
     document.getElementById('inviteNameInput').value = '';
@@ -2404,7 +2404,11 @@ async function sendInviteSms(phone, name, link){
   try{
     const { data: { session } } = await sbClient.auth.getSession();
     if(!session){ showToast('You need to be signed in'); return; }
-    const message = `Hi ${name}, welcome to the Coombs Consulting impact programme! Set up your account here: ${link} - Coombs Consulting`;
+    // South Africa doesn't allow alphanumeric SMS sender IDs, so BulkSMS's
+    // own guidance is to identify the brand at the very start of the
+    // message body instead (messages otherwise arrive from a generic
+    // shared number, which is more likely to be filtered as spam/unknown).
+    const message = `Coombs Consulting: Hi ${name}, welcome to the impact programme! Set up your account here: ${link}`;
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
       method: 'POST',
       headers: {
@@ -2445,8 +2449,8 @@ async function renderInviteList(){
         </div>
         ${inv.status === 'pending' ? `
         <div class="invite-row-actions">
-          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText('${link}'); showToast('Link copied');">Copy link</button>
-          <button class="btn btn-primary btn-sm" type="button" onclick="sendInviteSms('${escapeHtml(inv.phone)}','${escapeHtml(inv.name)}','${link}')">Resend SMS</button>
+          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText('${jsAttr(link)}'); showToast('Link copied');">Copy link</button>
+          <button class="btn btn-primary btn-sm" type="button" onclick="sendInviteSms('${jsAttr(inv.phone)}','${jsAttr(inv.name)}','${jsAttr(link)}')">Resend SMS</button>
         </div>` : ''}
       </div>`;
   }).join('')}</div>`;
@@ -4053,6 +4057,15 @@ async function saveNarrativeReport(){
 
 function escapeHtml(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+// Safe to drop into a single-quoted JS string literal that itself sits
+// inside a double-quoted HTML attribute (e.g. onclick="fn('${jsAttr(x)}')").
+// escapeHtml() alone doesn't escape quotes, so a name like "O'Callaghan"
+// breaks the JS string and throws "missing ) after argument list" — this
+// escapes backslashes and single quotes for the JS side, and double quotes
+// as an HTML entity for the attribute side.
+function jsAttr(s){
+  return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
 }
 function paragraphs(text){
   const t = (text||'').trim();
