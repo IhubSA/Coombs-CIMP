@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
@@ -832,7 +833,9 @@
         <input id="reportAssessorInput" type="text" placeholder="Your name" />
       </div>
       <button class="btn btn-sm" type="button" id="reportNewBtn">New report</button>
-      <button class="btn btn-gold btn-sm" id="reportPrintBtn">Print / export report</button>
+      <button class="btn btn-sm" id="reportPrintBtn">Print</button>
+      <button class="btn btn-gold btn-sm" id="reportPdfBtn">Download PDF</button>
+      <button class="btn btn-gold btn-sm" id="reportWordBtn">Download Word</button>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -3618,28 +3621,35 @@ async function renderProfile(){
       plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'Inter',size:11}} } } }
   });
 
+  // Where a period has both an admin-entered assessment AND a self-reported
+  // survey, both are listed as separate rows (not merged into one number)
+  // so nothing is hidden — the reader judges which to use for reporting.
   const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
-  document.getElementById('profileTableBody').innerHTML = periodsWithData.map(p => {
-    const r = recs[p];
-    const eri = indexPctForRecord(r,'ERI'), bhi = indexPctForRecord(r,'BHI'), sri = indexPctForRecord(r,'SRI');
-    const aii = computeAII(eri,bhi,sri);
-    const g = (baseAii!==null && aii!==null && p!=='Baseline') ? aii-baseAii : null;
-    const f = riskFlagFor(aii, g);
-    const sourceChip = r.seeded ? ' <span class="chip chip-grey" style="padding:2px 6px;">seeded</span>'
-      : r.source === 'self' ? ' <span class="chip chip-gold" style="padding:2px 6px;">self-reported</span>'
-      : '';
-    return `<tr>
-      <td>${p}${sourceChip}</td>
-      <td>${eri?eri.pct.toFixed(1)+'%':'—'}</td>
-      <td>${bhi?bhi.pct.toFixed(1)+'%':'—'}</td>
-      <td>${sri?sri.pct.toFixed(1)+'%':'—'}</td>
-      <td>${aii!==null?aii.toFixed(1)+'%':'—'}</td>
-      <td><span class="chip ${ragFor(aii).cls}">${ragFor(aii).label}</span></td>
-      <td>${g!==null?(g>=0?'+':'')+g.toFixed(1)+' pp':'—'}</td>
-      <td><span class="chip ${flagCls[f]}">${f}</span></td>
-      <td>${RECOMMENDED_ACTION[f]}</td>
-    </tr>`;
-  }).join('');
+  const rowsByPeriod = await Promise.all(periodsWithData.map(p => loadAssessmentsForPeriod(name, p)));
+  const tableRows = [];
+  periodsWithData.forEach((p, i) => {
+    rowsByPeriod[i].forEach(r => {
+      const eri = indexPctForRecord(r,'ERI'), bhi = indexPctForRecord(r,'BHI'), sri = indexPctForRecord(r,'SRI');
+      const aii = computeAII(eri,bhi,sri);
+      const g = (baseAii!==null && aii!==null && p!=='Baseline') ? aii-baseAii : null;
+      const f = riskFlagFor(aii, g);
+      const sourceChip = r.seeded ? ' <span class="chip chip-grey" style="padding:2px 6px;">seeded</span>'
+        : r.source === 'self' ? ' <span class="chip chip-gold" style="padding:2px 6px;">self-reported</span>'
+        : ' <span class="chip chip-grey" style="padding:2px 6px;">admin</span>';
+      tableRows.push(`<tr>
+        <td>${p}${sourceChip}</td>
+        <td>${eri?eri.pct.toFixed(1)+'%':'—'}</td>
+        <td>${bhi?bhi.pct.toFixed(1)+'%':'—'}</td>
+        <td>${sri?sri.pct.toFixed(1)+'%':'—'}</td>
+        <td>${aii!==null?aii.toFixed(1)+'%':'—'}</td>
+        <td><span class="chip ${ragFor(aii).cls}">${ragFor(aii).label}</span></td>
+        <td>${g!==null?(g>=0?'+':'')+g.toFixed(1)+' pp':'—'}</td>
+        <td><span class="chip ${flagCls[f]}">${f}</span></td>
+        <td>${RECOMMENDED_ACTION[f]}</td>
+      </tr>`);
+    });
+  });
+  document.getElementById('profileTableBody').innerHTML = tableRows.join('');
 
   const peiiRecs = [];
   for(const q of ['Q1','Q2','Q3','Q4']){
@@ -4049,12 +4059,37 @@ function paragraphs(text){
   return t.split(/\n{2,}/).map(p => `<p>${escapeHtml(p).replace(/\n/g,'<br>')}</p>`).join('');
 }
 
-async function generatePrintableReport(){
+// Gathers everything needed to export the currently-open narrative report,
+// or null (with a toast) if there's no beneficiary selected yet. Shared by
+// the print, PDF and Word export actions so they never drift apart.
+async function prepareReportExport(){
   const name = document.getElementById('reportBeneficiarySelect').value;
-  if(!name){ showToast('Select a beneficiary first'); return; }
+  if(!name){ showToast('Select a beneficiary first'); return null; }
   const assessor = document.getElementById('reportAssessorInput').value.trim();
   const data = await gatherBeneficiaryData(name);
-  const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
+  return { name, assessor, data };
+}
+
+const REPORT_PRINT_CSS = `
+    body{font-family:Georgia,'Times New Roman',serif; color:#1A1A1A; max-width:760px; margin:40px auto; padding:0 20px; line-height:1.6;}
+    header{display:flex; align-items:center; gap:20px; border-bottom:3px solid #1A1A1A; padding-bottom:16px; margin-bottom:6px;}
+    header img{height:64px;}
+    h1{font-size:22px; margin:0 0 4px;}
+    .meta{font-size:12.5px; color:#555; margin-bottom:28px;}
+    h2{font-size:16px; border-bottom:1px solid #ccc; padding-bottom:4px; margin-top:32px;}
+    .stat{background:#F7F5F0; border:1px solid #E3DDCF; border-radius:6px; padding:10px 14px; font-size:12.5px; margin:10px 0;}
+    table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+    th,td{text-align:left; padding:5px 7px; border-bottom:1px solid #ddd;}
+    p{font-size:13.5px; margin:8px 0;}
+    p.np{font-style:italic; color:#888;}
+    footer{margin-top:40px; font-size:11px; color:#888; border-top:1px solid #ddd; padding-top:10px;}
+    @media print{ body{margin:0; max-width:none;} }
+`;
+
+// The report's actual content (header through footer) — no <html>/<head>
+// wrapper, so it can be dropped into a print window, an offscreen div for
+// PDF rendering, or a Word-flavoured HTML document interchangeably.
+function buildReportBodyHtml(name, assessor, data){
   const logoSrc = document.querySelector('.emblem img').src;
   const today = new Date().toLocaleDateString();
 
@@ -4071,23 +4106,7 @@ async function generatePrintableReport(){
     <table><thead><tr><th>Quarter</th><th>PEII %</th><th>Rating</th><th>Feedback</th></tr></thead>
     <tbody>${data.peiiRecs.map(r=>`<tr><td>${r.quarter}</td><td>${r.pct!==null?r.pct.toFixed(1)+'%':'—'}</td><td>${ratingForPEII(r.pct)}</td><td>${escapeHtml(r.feedback)||'—'}</td></tr>`).join('')}</tbody></table>` : `<p class="np">No PEII entries on record.</p>`;
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(name)} — Impact Report</title>
-  <style>
-    body{font-family:Georgia,'Times New Roman',serif; color:#1A1A1A; max-width:760px; margin:40px auto; padding:0 20px; line-height:1.6;}
-    header{display:flex; align-items:center; gap:20px; border-bottom:3px solid #1A1A1A; padding-bottom:16px; margin-bottom:6px;}
-    header img{height:64px;}
-    h1{font-size:22px; margin:0 0 4px;}
-    .meta{font-size:12.5px; color:#555; margin-bottom:28px;}
-    h2{font-size:16px; border-bottom:1px solid #ccc; padding-bottom:4px; margin-top:32px;}
-    .stat{background:#F7F5F0; border:1px solid #E3DDCF; border-radius:6px; padding:10px 14px; font-size:12.5px; margin:10px 0;}
-    table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
-    th,td{text-align:left; padding:5px 7px; border-bottom:1px solid #ddd;}
-    p{font-size:13.5px; margin:8px 0;}
-    p.np{font-style:italic; color:#888;}
-    footer{margin-top:40px; font-size:11px; color:#888; border-top:1px solid #ddd; padding-top:10px;}
-    @media print{ body{margin:0; max-width:none;} }
-  </style></head>
-  <body>
+  return `
     <header><img src="${logoSrc}" alt="logo"><div><h1>Beneficiary Impact Report${currentReportNumber?' — Report #'+currentReportNumber:''}</h1><div class="meta">${escapeHtml(name)} · Prepared by ${escapeHtml(assessor)||'—'} · Report date: ${formatReportDate(document.getElementById('reportDateInput').value)||today} · Printed ${today}</div></div></header>
 
     <h2>1. Beneficiary Overview</h2>
@@ -4110,7 +4129,22 @@ async function generatePrintableReport(){
     ${paragraphs(document.getElementById('narrOverall').value)}
 
     <footer>Generated by Coombs Consulting — Measurement &amp; Assessment Tool.</footer>
-  </body></html>`;
+  `;
+}
+
+function reportExportFilename(name, ext){
+  const safe = (name || 'beneficiary').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
+  const period = currentReportNumber ? `_report${currentReportNumber}` : '';
+  return `${safe}${period}_impact_report.${ext}`;
+}
+
+async function generatePrintableReport(){
+  const ctx = await prepareReportExport();
+  if(!ctx) return;
+  const { name, assessor, data } = ctx;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escapeHtml(name)} — Impact Report</title>
+  <style>${REPORT_PRINT_CSS}</style></head>
+  <body>${buildReportBodyHtml(name, assessor, data)}</body></html>`;
 
   const w = window.open('', '_blank');
   if(!w){ showToast('Please allow pop-ups to print the report'); return; }
@@ -4119,6 +4153,64 @@ async function generatePrintableReport(){
   w.document.close();
   w.onload = () => { w.focus(); w.print(); };
   setTimeout(() => { try{ w.focus(); w.print(); }catch(e){} }, 400);
+}
+
+// Renders the report offscreen and rasterises it to a downloadable PDF with
+// html2pdf.js (loaded from CDN) — a direct one-click file rather than
+// relying on the browser's print-to-PDF dialog.
+async function downloadReportPdf(){
+  const ctx = await prepareReportExport();
+  if(!ctx) return;
+  const { name, assessor, data } = ctx;
+  if(typeof html2pdf === 'undefined'){ showToast('PDF export library did not load — check your connection and try again'); return; }
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed; left:-9999px; top:0; width:760px; background:#fff;';
+  container.innerHTML = `<style>${REPORT_PRINT_CSS}</style>${buildReportBodyHtml(name, assessor, data)}`;
+  document.body.appendChild(container);
+
+  showToast('Preparing PDF…');
+  try{
+    await html2pdf().set({
+      margin: 24,
+      filename: reportExportFilename(name, 'pdf'),
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+    }).from(container).save();
+  }catch(e){
+    console.error('PDF export failed', e);
+    showToast('Could not generate the PDF — please try again');
+  }finally{
+    container.remove();
+  }
+}
+
+// Builds a Word-flavoured HTML document (the standard technique for a
+// static site with no server-side conversion) and downloads it as .doc —
+// Word opens it natively and it's fully editable, headings/tables/styles
+// carry over. No external library or backend required.
+async function downloadReportWord(){
+  const ctx = await prepareReportExport();
+  if(!ctx) return;
+  const { name, assessor, data } = ctx;
+  const html = `<!DOCTYPE html>
+  <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+  <head><meta charset="UTF-8"><title>${escapeHtml(name)} — Impact Report</title>
+  <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+  <style>${REPORT_PRINT_CSS}</style></head>
+  <body>${buildReportBodyHtml(name, assessor, data)}</body></html>`;
+
+  const blob = new Blob(['﻿', html], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = reportExportFilename(name, 'doc');
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 /* ============================ EXPORT ============================ */
@@ -4224,6 +4316,8 @@ function bindStaticEventListeners(){
   document.getElementById('reportNewBtn').addEventListener('click', startNewReport);
   document.getElementById('reportSaveBtn').addEventListener('click', saveNarrativeReport);
   document.getElementById('reportPrintBtn').addEventListener('click', generatePrintableReport);
+  document.getElementById('reportPdfBtn').addEventListener('click', downloadReportPdf);
+  document.getElementById('reportWordBtn').addEventListener('click', downloadReportWord);
 
   document.getElementById('peiiBeneficiarySelect').addEventListener('change', switchPeiiContext);
   document.getElementById('peiiQuarterSelect').addEventListener('change', switchPeiiContext);
