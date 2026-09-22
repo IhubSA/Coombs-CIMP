@@ -3861,7 +3861,7 @@ async function loadNarrative(beneficiary){
 async function gatherBeneficiaryData(name){
   const recs = {};
   for(const p of PERIOD_ORDER){
-    const r = await loadAssessment(name, p);
+    const r = await loadAssessmentUnified(name, p);
     if(r) recs[p] = r;
   }
   const periodsWithData = PERIOD_ORDER.filter(p => recs[p]);
@@ -3877,7 +3877,8 @@ async function gatherBeneficiaryData(name){
     const r = await loadPEII(name, q);
     if(r) peiiRecs.push({...r, pct: peiiPctForRecord(r)});
   }
-  return { name, recs, periodsWithData, baseAii, latestP, latestRec, latestAii, growth, flag, peiiRecs };
+  const demo = await loadDemographic(name);
+  return { name, recs, periodsWithData, baseAii, latestP, latestRec, latestAii, growth, flag, peiiRecs, demo };
 }
 
 function renderReportStats(data){
@@ -4089,6 +4090,96 @@ const REPORT_PRINT_CSS = `
 // The report's actual content (header through footer) — no <html>/<head>
 // wrapper, so it can be dropped into a print window, an offscreen div for
 // PDF rendering, or a Word-flavoured HTML document interchangeably.
+// RAG colour lookup as hex values (the report is a standalone exported
+// document, so it can't rely on the main app's .chip CSS classes).
+function reportRagHex(pct){
+  if(pct === null || pct === undefined) return { fg:'#8C8778', bg:'#EDEAE2' };
+  if(pct >= 80) return { fg:'#3C7A5B', bg:'#E4EEE7' };
+  if(pct >= 60) return { fg:'#B5860B', bg:'#F6EDD3' };
+  if(pct >= 40) return { fg:'#B5651D', bg:'#F3E3D3' };
+  return { fg:'#A23B34', bg:'#F2E0DD' };
+}
+function reportFlagHex(flag){
+  const map = {
+    High: { fg:'#A23B34', bg:'#F2E0DD' },
+    Declining: { fg:'#B5651D', bg:'#F3E3D3' },
+    Medium: { fg:'#B5651D', bg:'#F3E3D3' },
+    Watch: { fg:'#B5860B', bg:'#F6EDD3' },
+    Low: { fg:'#3C7A5B', bg:'#E4EEE7' },
+    'No Data': { fg:'#8C8778', bg:'#EDEAE2' },
+  };
+  return map[flag] || map['No Data'];
+}
+
+// A condensed, visual recap appended at the end of the exported report —
+// KPI tiles and index bars pulled from the same Beneficiary profile data,
+// built with plain tables/inline styles (not the main app's CSS/flexbox)
+// so it renders consistently in print, PDF and the Word export alike.
+function buildExecutiveSummaryHtml(data){
+  if(!data.periodsWithData.length){
+    return `<h2>6. Executive Summary Dashboard</h2><p class="np">No diagnostic data on record yet — this section will populate once an assessment is saved.</p>`;
+  }
+  const neutral = { fg:'#1A1A1A', bg:'#F7F5F0' };
+  const latestRec = data.recs[data.latestP];
+  const eri = indexPctForRecord(latestRec,'ERI'), bhi = indexPctForRecord(latestRec,'BHI'), sri = indexPctForRecord(latestRec,'SRI');
+
+  const kpiCell = (label, value, hex) => `
+    <td style="background:${hex.bg}; border-radius:6px; padding:14px 8px; text-align:center; width:20%;">
+      <div style="font-size:9.5px; text-transform:uppercase; letter-spacing:0.05em; color:#6B665A; margin-bottom:5px;">${label}</div>
+      <div style="font-size:17px; font-weight:bold; color:${hex.fg};">${value}</div>
+    </td>`;
+  const kpiTable = `
+    <table style="width:100%; border-collapse:separate; border-spacing:8px 0; margin:14px 0 18px;"><tr>
+      ${kpiCell('Latest period', data.latestP, neutral)}
+      ${kpiCell('Latest AII', data.latestAii!==null?data.latestAii.toFixed(1)+'%':'—', reportRagHex(data.latestAii))}
+      ${kpiCell('Baseline AII', data.baseAii!==null?data.baseAii.toFixed(1)+'%':'—', reportRagHex(data.baseAii))}
+      ${kpiCell('Growth', data.growth!==null?(data.growth>=0?'+':'')+data.growth.toFixed(1)+' pp':'—', neutral)}
+      ${kpiCell('Risk flag', data.flag, reportFlagHex(data.flag))}
+    </tr></table>`;
+
+  const barRow = (label, v) => {
+    const pct = v ? v.pct : null;
+    const hex = reportRagHex(pct);
+    const w = pct === null || pct === undefined ? 0 : Math.max(2, Math.min(100, pct));
+    return `<tr>
+      <td style="width:50px; font-size:12px; padding:5px 8px 5px 0;">${label}</td>
+      <td style="padding:5px 0;">
+        <table style="width:100%; border-collapse:collapse;"><tr>
+          <td style="width:${w}%; background:${hex.fg}; height:12px; border-radius:3px 0 0 3px;"></td>
+          <td style="width:${100-w}%; background:#E8E4D8; height:12px; border-radius:0 3px 3px 0;"></td>
+        </tr></table>
+      </td>
+      <td style="width:40px; text-align:right; font-size:12px; font-weight:bold; padding:5px 0 5px 8px;">${pct!==null&&pct!==undefined?pct.toFixed(0)+'%':'—'}</td>
+    </tr>`;
+  };
+  const barsTable = `
+    <table style="width:100%; border-collapse:collapse; margin:4px 0 4px;">
+      ${barRow('ERI', eri)}${barRow('BHI', bhi)}${barRow('SRI', sri)}
+    </table>
+    <p style="font-size:11px; color:#888; margin:0 0 14px;">Index breakdown for the latest period (${data.latestP}).</p>`;
+
+  const demoData = data.demo && data.demo.data;
+  const snapshotBits = demoData ? [
+    demoData.industry, demoData.business_category, demoData.town, demoData.gender,
+    demoData.experience_years ? `${demoData.experience_years} yrs experience` : null,
+  ].filter(Boolean) : [];
+  const snapshot = snapshotBits.length
+    ? `<p style="font-size:12.5px; color:#555; margin:0 0 6px;"><b>Onboarding snapshot:</b> ${snapshotBits.map(v=>escapeHtml(String(v))).join(' · ')}</p>` : '';
+
+  const peiiVals = data.peiiRecs.map(r=>r.pct).filter(v=>v!==null && v!==undefined);
+  const peiiAvg = peiiVals.length ? peiiVals.reduce((a,b)=>a+b,0)/peiiVals.length : null;
+  const peiiLine = data.peiiRecs.length
+    ? `<p style="font-size:12.5px; color:#555; margin:0;"><b>Programme experience:</b> Average PEII ${peiiAvg!==null?peiiAvg.toFixed(1)+'%':'—'} across ${data.peiiRecs.length} quarter${data.peiiRecs.length>1?'s':''} on record.</p>` : '';
+
+  return `
+    <h2>6. Executive Summary Dashboard</h2>
+    ${kpiTable}
+    ${barsTable}
+    ${snapshot}
+    ${peiiLine}
+  `;
+}
+
 function buildReportBodyHtml(name, assessor, data){
   const logoSrc = document.querySelector('.emblem img').src;
   const today = new Date().toLocaleDateString();
@@ -4127,6 +4218,8 @@ function buildReportBodyHtml(name, assessor, data){
 
     <h2>5. Overall Conclusion &amp; Recommendations</h2>
     ${paragraphs(document.getElementById('narrOverall').value)}
+
+    ${buildExecutiveSummaryHtml(data)}
 
     <footer>Generated by Coombs Consulting — Measurement &amp; Assessment Tool.</footer>
   `;
