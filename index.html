@@ -346,6 +346,16 @@
   }
   .cohort-pill button:hover{color:var(--red);}
   .sponsor-card-actions{display:flex; gap:8px;}
+  .invite-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
+  .invite-row{
+    background:var(--sage); border:1px solid var(--sage-line); border-radius:10px; padding:12px 14px;
+    display:flex; flex-wrap:wrap; align-items:center; gap:10px; justify-content:space-between;
+  }
+  .invite-row .invite-meta{font-size:12.5px; color:var(--ink-soft);}
+  .invite-row .invite-meta b{color:var(--ink);}
+  .invite-row-actions{display:flex; gap:8px; flex-wrap:wrap;}
+  .chip-pending{background:#F3E7C9; color:#7A5C10;}
+  .chip-used{background:#DCEBD9; color:#2E6B34;}
   .allocation-row select, .allocation-row input{
     width:100%; padding:8px 9px; border-radius:8px; border:1px solid var(--sage-line);
     background:var(--sage); font-family:'Inter',sans-serif; font-size:13px; color:var(--ink);
@@ -456,8 +466,8 @@
 
     <form id="loginForm">
       <div class="field">
-        <label for="loginEmail">Email</label>
-        <input type="email" id="loginEmail" autocomplete="username" required />
+        <label for="loginEmail">Email or phone number</label>
+        <input type="text" id="loginEmail" autocomplete="username" required />
       </div>
       <div class="field">
         <label for="loginPassword">Password</label>
@@ -1094,13 +1104,32 @@ function showAuthPanel(which){
 
 async function updateUserBadge(){
   const { data: { user } } = await sbClient.auth.getUser();
-  document.getElementById('userEmailLabel').textContent = user ? `Signed in as ${user.email}` : '';
+  if(!user){ document.getElementById('userEmailLabel').textContent = ''; return; }
+  const label = (currentUserRole && currentUserRole.role === 'beneficiary') ? currentUserRole.beneficiary : user.email;
+  document.getElementById('userEmailLabel').textContent = `Signed in as ${label}`;
+}
+
+// Beneficiaries log in with just their phone number (no email address is
+// ever collected from them). Under the hood their account still uses
+// Supabase's normal email+password auth, with a synthetic, never-emailed
+// address derived from the phone number — the same pattern the
+// redeem-invite Edge Function uses when creating the account. This lets
+// one login form serve both admins (real email) and beneficiaries (phone).
+function looksLikePhoneNumber(input){
+  return /^[+\d][\d\s\-()]{5,}$/.test(input);
+}
+function phoneDigitsOnly(phone){
+  return (phone || '').replace(/\D/g, '');
+}
+function syntheticEmailForPhone(phone){
+  return `beneficiary+${phoneDigitsOnly(phone)}@cimp.lizellecoombs.internal`;
 }
 
 function bindAuthUI(){
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value.trim();
+    const rawInput = document.getElementById('loginEmail').value.trim();
+    const email = looksLikePhoneNumber(rawInput) ? syntheticEmailForPhone(rawInput) : rawInput;
     const password = document.getElementById('loginPassword').value;
     const errorEl = document.getElementById('loginError');
     const submitBtn = document.getElementById('loginSubmitBtn');
@@ -1208,14 +1237,78 @@ function bindAuthUI(){
 }
 
 let appEntered = false;
+let currentUserRole = null; // { role: 'admin'|'beneficiary', beneficiary: string|null }
+
+async function loadCurrentUserRole(){
+  try{
+    const { data: { user } } = await sbClient.auth.getUser();
+    if(!user) return null;
+    const { data, error } = await db.from('user_roles').select('role,beneficiary').eq('user_id', user.id).maybeSingle();
+    if(error) throw error;
+    return data || null;
+  }catch(e){ console.error('Failed to load user role', e); return null; }
+}
 
 async function enterApp(){
   if(appEntered) return; // avoid re-running data loads if this fires more than once
   appEntered = true;
   dbReady = true;
   hideLoginScreen();
+  currentUserRole = await loadCurrentUserRole();
   await updateUserBadge();
-  await loadAppData();
+  if(currentUserRole && currentUserRole.role === 'beneficiary'){
+    await enterBeneficiaryMode(currentUserRole.beneficiary);
+  } else {
+    await loadAppData();
+  }
+}
+
+// A beneficiary only ever sees their own Enterprise Survey onboarding —
+// no admin nav, no picking other beneficiaries. This finds whichever
+// step is next (Demographic Intake, then Baseline/Q1/Q2/Q3/Q4 in order)
+// and shows only that, locking the beneficiary/period pickers to it.
+async function enterBeneficiaryMode(name){
+  document.querySelector('.tabnav').style.display = 'none';
+  ['view-dashboard','view-collect','view-monitor','view-profile','view-peii','view-report','view-sponsors','view-invites','view-interns']
+    .forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
+  document.getElementById('view-enterprise').style.display = '';
+
+  const entSetup = document.querySelector('#view-enterprise .setup');
+  if(entSetup) entSetup.style.display = 'none';
+  document.getElementById('entBeneficiarySelect').innerHTML = `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`;
+  document.getElementById('entBeneficiarySelect').value = name;
+
+  const subnav = document.querySelector('#view-enterprise .subnav');
+  if(subnav) subnav.style.display = 'none';
+
+  const demo = await loadDemographic(name);
+  if(!demo){
+    switchEnterpriseSubview('demo');
+    await switchEnterpriseContext();
+    document.getElementById('entSubDemo').insertAdjacentHTML('afterbegin',
+      `<div class="section-hint" style="margin-bottom:10px;"><b>Welcome, ${escapeHtml(name)}!</b> Please complete this short intake form to get started.</div>`);
+    return;
+  }
+
+  const periods = ['Baseline','Q1','Q2','Q3','Q4'];
+  let nextPeriod = null;
+  for(const p of periods){
+    const { data } = await db.from('enterprise_survey_responses').select('id').eq('beneficiary', name).eq('period', p).maybeSingle();
+    if(!data){ nextPeriod = p; break; }
+  }
+
+  if(!nextPeriod){
+    document.getElementById('entSubDemo').style.display = 'none';
+    document.getElementById('entSubSurvey').innerHTML = `<div class="section-hint"><b>You're all caught up!</b> Thank you for completing every survey so far — we'll text you when your next one is due.</div>`;
+    document.getElementById('entSubSurvey').style.display = '';
+    return;
+  }
+
+  switchEnterpriseSubview('survey');
+  const periodSetup = document.querySelector('#entSubSurvey .setup');
+  if(periodSetup) periodSetup.style.display = 'none';
+  document.getElementById('entPeriodSelect').value = nextPeriod;
+  await switchEnterpriseContext();
 }
 
 /* ============================ DATA ============================ */
@@ -2210,6 +2303,91 @@ async function unassignCohort(key){
   await renderSponsorHint();
 }
 
+/* ============================ BENEFICIARY INVITES ============================ */
+
+async function createInvite(){
+  const name = document.getElementById('inviteNameInput').value.trim();
+  const phone = document.getElementById('invitePhoneInput').value.trim();
+  const programme = document.getElementById('inviteProgrammeInput').value.trim();
+  const cohort = document.getElementById('inviteCohortInput').value.trim();
+  const resultEl = document.getElementById('inviteCreateResult');
+  resultEl.innerHTML = '';
+  if(!name || !phone || !programme || !cohort){ showToast('Fill in all fields'); return; }
+  try{
+    const { data, error } = await db.from('beneficiary_invites')
+      .insert({ name, phone, programme, cohort })
+      .select('token').single();
+    if(error) throw error;
+    const link = `${window.location.origin}/signup.html?token=${data.token}`;
+    resultEl.innerHTML = `
+      <div class="invite-row" style="margin-top:12px;">
+        <div class="invite-meta">Invite created for <b>${escapeHtml(name)}</b>.<br>Link: <code style="font-size:11.5px;">${escapeHtml(link)}</code></div>
+        <div class="invite-row-actions">
+          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText('${link}'); showToast('Link copied');">Copy link</button>
+          <button class="btn btn-primary btn-sm" type="button" onclick="sendInviteSms('${escapeHtml(phone)}','${escapeHtml(name)}','${link}')">Send SMS invite</button>
+        </div>
+      </div>`;
+    document.getElementById('inviteNameInput').value = '';
+    document.getElementById('invitePhoneInput').value = '';
+    showToast(`Invite created for ${name}`);
+    renderInviteList();
+  }catch(e){ console.error(e); showToast('Could not create invite — please try again'); }
+}
+
+// Calls the send-sms Edge Function (which holds the BulkSMS credentials
+// server-side) so the admin's browser never touches those secrets directly.
+async function sendInviteSms(phone, name, link){
+  try{
+    const { data: { session } } = await sbClient.auth.getSession();
+    if(!session){ showToast('You need to be signed in'); return; }
+    const message = `Hi ${name}, welcome to the Coombs Consulting impact programme! Set up your account here: ${link} - Coombs Consulting`;
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phone, message }),
+    });
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.error || 'Failed to send SMS');
+    showToast(`SMS sent to ${name}`);
+  }catch(e){ console.error(e); showToast('Could not send SMS — ' + (e.message || 'please try again')); }
+}
+
+async function loadInvites(){
+  try{
+    const { data, error } = await db.from('beneficiary_invites').select('*').order('created_at', { ascending: false });
+    if(error) throw error;
+    return data || [];
+  }catch(e){ console.error('Failed to load invites', e); return []; }
+}
+
+async function renderInviteList(){
+  const invites = await loadInvites();
+  const area = document.getElementById('inviteListArea');
+  if(!invites.length){ area.innerHTML = '<div class="empty-note">No invites yet.</div>'; return; }
+  area.innerHTML = `<div class="invite-list">${invites.map(inv => {
+    const link = `${window.location.origin}/signup.html?token=${inv.token}`;
+    const statusChip = inv.status === 'used'
+      ? `<span class="chip chip-used">Used${inv.used_at ? ' · '+new Date(inv.used_at).toLocaleDateString() : ''}</span>`
+      : `<span class="chip chip-pending">Pending</span>`;
+    return `
+      <div class="invite-row">
+        <div class="invite-meta">
+          <b>${escapeHtml(inv.name)}</b> · ${escapeHtml(inv.phone)} · ${escapeHtml(inv.programme)} / ${escapeHtml(inv.cohort)}
+          &nbsp;${statusChip}
+        </div>
+        ${inv.status === 'pending' ? `
+        <div class="invite-row-actions">
+          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText('${link}'); showToast('Link copied');">Copy link</button>
+          <button class="btn btn-primary btn-sm" type="button" onclick="sendInviteSms('${escapeHtml(inv.phone)}','${escapeHtml(inv.name)}','${link}')">Resend SMS</button>
+        </div>` : ''}
+      </div>`;
+  }).join('')}</div>`;
+}
+
 async function renderSponsorPortal(){
   const sponsors = await loadSponsors();
   const map = await loadCohortMap();
@@ -2858,6 +3036,11 @@ async function saveDemographic(){
     if(error) throw error;
     showToast(`Saved demographic intake — ${beneficiary}`);
     document.getElementById('demoSavedNote').textContent = `Last saved ${new Date(row.saved_at).toLocaleString()}`;
+    // A beneficiary completing their own onboarding moves straight on to
+    // their Baseline survey — there's no subnav for them to click through to it.
+    if(currentUserRole && currentUserRole.role === 'beneficiary'){
+      await enterBeneficiaryMode(beneficiary);
+    }
   }catch(e){ console.error(e); showToast('Could not save — please try again'); }
 }
 
@@ -2920,6 +3103,11 @@ async function saveEnterpriseSurvey(){
     if(error) throw error;
     showToast(`Saved ${period} survey — ${beneficiary}`);
     document.getElementById('entSurveySavedNote').textContent = `Last saved ${new Date(row.saved_at).toLocaleString()}`;
+    // Move a beneficiary on to whichever period is next (or the "all
+    // caught up" message) — they have no subnav to navigate manually.
+    if(currentUserRole && currentUserRole.role === 'beneficiary'){
+      await enterBeneficiaryMode(beneficiary);
+    }
   }catch(e){ console.error(e); showToast('Could not save — please try again'); }
 }
 
@@ -3922,6 +4110,7 @@ function bindStaticEventListeners(){
   document.getElementById('tabBtnReport').addEventListener('click', () => switchTab('report'));
   document.getElementById('tabBtnSponsors').addEventListener('click', () => switchTab('sponsors'));
   document.getElementById('tabBtnInvites').addEventListener('click', () => switchTab('invites'));
+  document.getElementById('createInviteBtn').addEventListener('click', createInvite);
   document.getElementById('tabBtnEnterprise').addEventListener('click', () => switchTab('enterprise'));
   document.getElementById('tabBtnInterns').addEventListener('click', () => switchTab('interns'));
   document.getElementById('jrSaveBtn').addEventListener('click', saveJR);
