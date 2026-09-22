@@ -316,8 +316,10 @@
     background:var(--paper); font-family:'Inter',sans-serif; font-size:13.5px; line-height:1.55; resize:vertical;
   }
   .narrative-textarea:focus{outline:2px solid var(--gold); outline-offset:1px;}
-  .report-meta-row{display:grid; grid-template-columns:1fr 1fr auto; gap:14px; align-items:end;}
-  @media (max-width:700px){ .report-meta-row{grid-template-columns:1fr;} }
+  .report-meta-row{display:flex; flex-wrap:wrap; gap:14px; align-items:end;}
+  .report-meta-row .field{ flex:1 1 160px; min-width:140px; margin-bottom:0; }
+  .report-meta-row button{ flex:0 0 auto; }
+  @media (max-width:700px){ .report-meta-row .field{ flex:1 1 100%; } }
 
   /* ---------- Client portal / sponsors ---------- */
   .sponsor-hint{
@@ -792,9 +794,18 @@
         <select id="reportBeneficiarySelect"></select>
       </div>
       <div class="field">
+        <label for="reportSelect">Report</label>
+        <select id="reportSelect"></select>
+      </div>
+      <div class="field">
+        <label for="reportDateInput">Report date</label>
+        <input id="reportDateInput" type="date" />
+      </div>
+      <div class="field">
         <label for="reportAssessorInput">Assessor name</label>
         <input id="reportAssessorInput" type="text" placeholder="Your name" />
       </div>
+      <button class="btn btn-sm" type="button" id="reportNewBtn">New report</button>
       <button class="btn btn-gold btn-sm" id="reportPrintBtn">Print / export report</button>
     </div>
 
@@ -3472,21 +3483,47 @@ async function renderPeiiSummary(){
 
 /* ============================ NARRATIVE REPORT ============================ */
 
-async function loadNarrative(beneficiary){
+// A beneficiary can now have many narrative reports over time (one per
+// reporting cycle), each with its own report_number and report_date,
+// rather than a single row that gets overwritten on every save.
+let currentReportId = null;      // id of the report currently loaded in the form, or null for a new/unsaved one
+let currentReportNumber = null;  // report_number shown/saved for the current form
+
+function rowToReport(data){
+  return {
+    id: data.id, beneficiary: data.beneficiary, assessor: data.assessor || '',
+    reportNumber: data.report_number, reportDate: data.report_date,
+    sections: {
+      overview: data.overview || '', diagnostic: data.diagnostic || '',
+      growth: data.growth || '', peii: data.peii || '', overall: data.overall || '',
+    },
+    savedAt: data.saved_at,
+  };
+}
+
+// Returns every report on record for a beneficiary, most recent first.
+async function loadNarrativeHistory(beneficiary){
   try{
     const { data, error } = await db.from('narrative_reports').select('*')
-      .eq('beneficiary', beneficiary).maybeSingle();
+      .eq('beneficiary', beneficiary).order('report_number', { ascending: false });
     if(error) throw error;
-    if(!data) return null;
-    return {
-      beneficiary: data.beneficiary, assessor: data.assessor || '',
-      sections: {
-        overview: data.overview || '', diagnostic: data.diagnostic || '',
-        growth: data.growth || '', peii: data.peii || '', overall: data.overall || '',
-      },
-      savedAt: data.saved_at,
-    };
+    return (data || []).map(rowToReport);
+  }catch(e){ console.error('Failed to load narrative report history', e); return []; }
+}
+
+async function loadNarrativeById(id){
+  try{
+    const { data, error } = await db.from('narrative_reports').select('*').eq('id', id).maybeSingle();
+    if(error) throw error;
+    return data ? rowToReport(data) : null;
   }catch(e){ console.error('Failed to load narrative report', e); return null; }
+}
+
+// Kept for anything still calling the old single-report accessor — now
+// returns the most recent report on file for the beneficiary, if any.
+async function loadNarrative(beneficiary){
+  const history = await loadNarrativeHistory(beneficiary);
+  return history.length ? history[0] : null;
 }
 
 async function gatherBeneficiaryData(name){
@@ -3546,6 +3583,49 @@ function renderReportStats(data){
   ` : `No PEII entries on record yet.`;
 }
 
+function todayISODate(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function formatReportDate(iso){
+  if(!iso) return '';
+  return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
+}
+
+// Populates the "Report" dropdown for whichever beneficiary is selected,
+// with each existing report labelled by its number and date, plus a
+// "New report" option at the top for starting a fresh one.
+function populateReportSelect(history, selectId){
+  const sel = document.getElementById('reportSelect');
+  sel.innerHTML = '';
+  const newOpt = document.createElement('option');
+  newOpt.value = '__new__';
+  newOpt.textContent = `New report (#${history.length + 1})`;
+  sel.appendChild(newOpt);
+  history.forEach(rep => {
+    const opt = document.createElement('option');
+    opt.value = rep.id;
+    opt.textContent = `Report #${rep.reportNumber} — ${formatReportDate(rep.reportDate)}`;
+    sel.appendChild(opt);
+  });
+  sel.value = selectId || (history.length ? history[0].id : '__new__');
+}
+
+// Fills the form fields for a specific loaded report (or clears them for a new one).
+function populateReportForm(rec){
+  document.getElementById('reportAssessorInput').value = rec ? (rec.assessor || '') : '';
+  document.getElementById('reportDateInput').value = rec ? (rec.reportDate || todayISODate()) : todayISODate();
+  document.getElementById('narrOverview').value = rec ? (rec.sections.overview || '') : '';
+  document.getElementById('narrDiagnostic').value = rec ? (rec.sections.diagnostic || '') : '';
+  document.getElementById('narrGrowth').value = rec ? (rec.sections.growth || '') : '';
+  document.getElementById('narrPeii').value = rec ? (rec.sections.peii || '') : '';
+  document.getElementById('narrOverall').value = rec ? (rec.sections.overall || '') : '';
+  document.getElementById('reportSavedNote').textContent = rec && rec.savedAt ? `Last saved ${new Date(rec.savedAt).toLocaleString()}` : '';
+  currentReportId = rec ? rec.id : null;
+  currentReportNumber = rec ? rec.reportNumber : null;
+}
+
 async function switchReportContext(){
   const list = await loadBeneficiaryList();
   populateSelect('reportBeneficiarySelect', list);
@@ -3555,19 +3635,39 @@ async function switchReportContext(){
   const data = await gatherBeneficiaryData(name);
   renderReportStats(data);
 
-  const rec = await loadNarrative(name);
-  document.getElementById('reportAssessorInput').value = rec ? (rec.assessor || '') : '';
-  document.getElementById('narrOverview').value = rec ? (rec.sections.overview || '') : '';
-  document.getElementById('narrDiagnostic').value = rec ? (rec.sections.diagnostic || '') : '';
-  document.getElementById('narrGrowth').value = rec ? (rec.sections.growth || '') : '';
-  document.getElementById('narrPeii').value = rec ? (rec.sections.peii || '') : '';
-  document.getElementById('narrOverall').value = rec ? (rec.sections.overall || '') : '';
-  document.getElementById('reportSavedNote').textContent = rec && rec.savedAt ? `Last saved ${new Date(rec.savedAt).toLocaleString()}` : '';
+  const history = await loadNarrativeHistory(name);
+  populateReportSelect(history);
+  populateReportForm(history.length ? history[0] : null);
+}
+
+// Loads whichever report the admin picked from the "Report" dropdown —
+// either an existing dated report, or a blank "New report" slot.
+async function switchSelectedReport(){
+  const val = document.getElementById('reportSelect').value;
+  if(val === '__new__'){
+    populateReportForm(null);
+    return;
+  }
+  const rec = await loadNarrativeById(val);
+  populateReportForm(rec);
+}
+
+// Explicitly starts a brand-new report for the currently-selected
+// beneficiary, so the next save creates a new dated row instead of
+// overwriting whichever report was last open.
+async function startNewReport(){
+  const name = document.getElementById('reportBeneficiarySelect').value;
+  if(!name){ showToast('Select a beneficiary first'); return; }
+  const history = await loadNarrativeHistory(name);
+  populateReportSelect(history, '__new__');
+  populateReportForm(null);
+  showToast('Starting a new report — fill it in and click Save report');
 }
 
 async function saveNarrativeReport(){
   const name = document.getElementById('reportBeneficiarySelect').value;
   if(!name){ showToast('Select a beneficiary first'); return; }
+  const reportDate = document.getElementById('reportDateInput').value || todayISODate();
   const record = {
     beneficiary: name,
     assessor: document.getElementById('reportAssessorInput').value.trim(),
@@ -3581,16 +3681,40 @@ async function saveNarrativeReport(){
     savedAt: new Date().toISOString(),
   };
   try{
-    const row = {
-      beneficiary: name, assessor: record.assessor,
-      overview: record.sections.overview, diagnostic: record.sections.diagnostic,
-      growth: record.sections.growth, peii: record.sections.peii, overall: record.sections.overall,
-      saved_at: record.savedAt,
-    };
-    const { error } = await db.from('narrative_reports').upsert(row, { onConflict: 'beneficiary' });
-    if(error) throw error;
-    showToast(`Saved report — ${name}`);
+    if(currentReportId){
+      // Editing a report that's already on file — update that same row,
+      // keeping its original report_number and report_date.
+      const row = {
+        assessor: record.assessor,
+        overview: record.sections.overview, diagnostic: record.sections.diagnostic,
+        growth: record.sections.growth, peii: record.sections.peii, overall: record.sections.overall,
+        report_date: reportDate,
+        saved_at: record.savedAt,
+      };
+      const { error } = await db.from('narrative_reports').update(row).eq('id', currentReportId);
+      if(error) throw error;
+      showToast(`Updated report #${currentReportNumber} — ${name}`);
+    } else {
+      // A new report for this beneficiary — give it the next report
+      // number so it's saved alongside past reports, not over them.
+      const history = await loadNarrativeHistory(name);
+      const nextNumber = history.length ? Math.max(...history.map(r => r.reportNumber)) + 1 : 1;
+      const row = {
+        beneficiary: name, assessor: record.assessor,
+        overview: record.sections.overview, diagnostic: record.sections.diagnostic,
+        growth: record.sections.growth, peii: record.sections.peii, overall: record.sections.overall,
+        report_number: nextNumber, report_date: reportDate,
+        saved_at: record.savedAt,
+      };
+      const { data, error } = await db.from('narrative_reports').insert(row).select('id').single();
+      if(error) throw error;
+      currentReportId = data.id;
+      currentReportNumber = nextNumber;
+      showToast(`Saved new report #${nextNumber} — ${name}`);
+    }
     document.getElementById('reportSavedNote').textContent = `Last saved ${new Date(record.savedAt).toLocaleString()}`;
+    const history = await loadNarrativeHistory(name);
+    populateReportSelect(history, currentReportId);
   }catch(e){ console.error(e); showToast('Could not save — please try again'); }
 }
 
@@ -3642,7 +3766,7 @@ async function generatePrintableReport(){
     @media print{ body{margin:0; max-width:none;} }
   </style></head>
   <body>
-    <header><img src="${logoSrc}" alt="logo"><div><h1>Beneficiary Impact Report</h1><div class="meta">${escapeHtml(name)} · Prepared by ${escapeHtml(assessor)||'—'} · ${today}</div></div></header>
+    <header><img src="${logoSrc}" alt="logo"><div><h1>Beneficiary Impact Report${currentReportNumber?' — Report #'+currentReportNumber:''}</h1><div class="meta">${escapeHtml(name)} · Prepared by ${escapeHtml(assessor)||'—'} · Report date: ${formatReportDate(document.getElementById('reportDateInput').value)||today} · Printed ${today}</div></div></header>
 
     <h2>1. Beneficiary Overview</h2>
     <div class="stat">Latest period: <b>${data.latestP||'—'}</b> · AII: <b>${data.latestAii!==null?data.latestAii.toFixed(1)+'%':'—'}</b> (${ragFor(data.latestAii).label})${data.baseAii!==null?` · Baseline AII: <b>${data.baseAii.toFixed(1)}%</b>`:''}</div>
@@ -3772,6 +3896,8 @@ function bindStaticEventListeners(){
   document.getElementById('profileBeneficiarySelect').addEventListener('change', renderProfile);
 
   document.getElementById('reportBeneficiarySelect').addEventListener('change', switchReportContext);
+  document.getElementById('reportSelect').addEventListener('change', switchSelectedReport);
+  document.getElementById('reportNewBtn').addEventListener('click', startNewReport);
   document.getElementById('reportSaveBtn').addEventListener('click', saveNarrativeReport);
   document.getElementById('reportPrintBtn').addEventListener('click', generatePrintableReport);
 
