@@ -1851,23 +1851,34 @@ async function upsertAssessment(record){
   if(error) throw error;
 }
 
-// Merges the two places a period's ERI/BHI/SRI answers can live: the
-// admin-entered diagnostic (`assessments`, from 1:1 interviews) and a
-// beneficiary's own self-service survey (`enterprise_survey_responses`).
-// Both share the same question-code namespace (ERI_*, BHI_*, SRI_*), so the
-// same scoring functions work on either. Reporting views (Beneficiary
-// profile, Monitor cohort) use this so self-service data shows up without
-// an admin re-entering it; Collect data itself stays admin-only (it edits
-// `assessments` directly) so the two don't get mixed up mid-edit.
-async function loadAssessmentUnified(beneficiary, period){
+// A period's ERI/BHI/SRI answers can live in two places: the admin-entered
+// diagnostic (`assessments`, from 1:1 interviews) and a beneficiary's own
+// self-service survey (`enterprise_survey_responses`). Both share the same
+// question-code namespace (ERI_*, BHI_*, SRI_*), so the same scoring
+// functions work on either. This returns every record that exists for the
+// period (0, 1 or both) rather than picking one — used where nothing
+// should be hidden, e.g. the Beneficiary profile's period table.
+async function loadAssessmentsForPeriod(beneficiary, period){
+  const results = [];
   const admin = await loadAssessment(beneficiary, period);
-  if(admin) return { ...admin, source: 'admin' };
+  if(admin) results.push({ ...admin, source: 'admin' });
   const self = await loadEnterpriseSurvey(beneficiary, period);
-  if(self) return {
+  if(self) results.push({
     beneficiary, period, scores: self.scores || {}, computedPct: undefined,
     seeded: false, savedAt: self.savedAt, source: 'self',
-  };
-  return null;
+  });
+  return results;
+}
+
+// Picks a single "canonical" record for a period, for places that need
+// exactly one value (cohort-average trend lines, KPI tiles) — admin-entered
+// wins when both exist, since it's treated as the more rigorous record;
+// otherwise falls back to the self-reported one. Collect data itself stays
+// admin-only (it edits `assessments` directly) so the two never get mixed
+// up mid-edit.
+async function loadAssessmentUnified(beneficiary, period){
+  const all = await loadAssessmentsForPeriod(beneficiary, period);
+  return all.find(r => r.source === 'admin') || all[0] || null;
 }
 
 async function loadBaselineAII(beneficiary){
