@@ -204,6 +204,16 @@
   .chip-orange{background:var(--orange-bg); color:var(--orange);}
   .chip-red{background:var(--red-bg); color:var(--red);}
   .chip-grey{background:var(--grey-bg); color:var(--grey);}
+  .chip-gold{background:var(--gold-soft); color:var(--gold);}
+
+  .detail-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px 18px;
+  }
+  .detail-label{
+    font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft);
+    font-weight:600; margin-bottom:3px;
+  }
+  .detail-value{ font-size:13.5px; color:var(--ink); }
 
   .aii-value{font-family:'Playfair Display',serif; font-size:38px; font-weight:600; line-height:1; margin:4px 0 2px;}
   .aii-growth{font-size:12.5px; color:var(--ink-soft);}
@@ -720,6 +730,11 @@
         <label for="profileBeneficiarySelect">Beneficiary</label>
         <select id="profileBeneficiarySelect"></select>
       </div>
+    </div>
+
+    <div class="card" id="profileDemoCard" style="margin-top:16px;">
+      <div class="section-title">Onboarding &amp; background</div>
+      <div id="profileDemoBody" class="empty-note">No demographic intake on file yet.</div>
     </div>
 
     <div class="kpi-row" id="profileKpiRow" style="margin-top:16px;"></div>
@@ -1836,6 +1851,25 @@ async function upsertAssessment(record){
   if(error) throw error;
 }
 
+// Merges the two places a period's ERI/BHI/SRI answers can live: the
+// admin-entered diagnostic (`assessments`, from 1:1 interviews) and a
+// beneficiary's own self-service survey (`enterprise_survey_responses`).
+// Both share the same question-code namespace (ERI_*, BHI_*, SRI_*), so the
+// same scoring functions work on either. Reporting views (Beneficiary
+// profile, Monitor cohort) use this so self-service data shows up without
+// an admin re-entering it; Collect data itself stays admin-only (it edits
+// `assessments` directly) so the two don't get mixed up mid-edit.
+async function loadAssessmentUnified(beneficiary, period){
+  const admin = await loadAssessment(beneficiary, period);
+  if(admin) return { ...admin, source: 'admin' };
+  const self = await loadEnterpriseSurvey(beneficiary, period);
+  if(self) return {
+    beneficiary, period, scores: self.scores || {}, computedPct: undefined,
+    seeded: false, savedAt: self.savedAt, source: 'self',
+  };
+  return null;
+}
+
 async function loadBaselineAII(beneficiary){
   const rec = await loadAssessment(beneficiary, 'Baseline');
   if(!rec) return null;
@@ -1965,7 +1999,7 @@ async function loadAllAssessments(){
   let records = [];
   for(const name of list){
     for(const p of PERIOD_ORDER){
-      const rec = await loadAssessment(name, p).catch(()=>null);
+      const rec = await loadAssessmentUnified(name, p).catch(()=>null);
       if(rec) records.push(rec);
     }
   }
@@ -3483,6 +3517,36 @@ function populateSelect(id, list){
   if(list.includes(prev)) sel.value = prev;
 }
 
+// Shows what the beneficiary told us at onboarding (Demographic Intake),
+// so the profile isn't just diagnostic scores. Self-service beneficiaries
+// complete this themselves; legacy beneficiaries usually won't have one.
+async function renderProfileDemographic(name){
+  const body = document.getElementById('profileDemoBody');
+  const demo = await loadDemographic(name);
+  if(!demo){
+    body.className = 'empty-note';
+    body.innerHTML = 'No demographic intake on file yet.';
+    return;
+  }
+  const d = demo.data || {};
+  const rows = [
+    ['Town', d.town], ['Gender', d.gender], ['Age', d.age],
+    ['Industry', d.industry], ['Business stage', d.business_category],
+    ['Education', d.education], ['Years of experience', d.experience_years],
+    ['Prior business experience', d.prior_experience],
+  ].filter(([,v]) => v !== undefined && v !== null && v !== '');
+  const challenges = Array.isArray(d.challenges) && d.challenges.length ? d.challenges.join(', ') : null;
+
+  body.className = '';
+  body.innerHTML = `
+    <div class="section-hint" style="margin-bottom:10px;">Completed ${new Date(demo.savedAt).toLocaleDateString()} — onboarding intake, not diagnostic scores.</div>
+    <div class="detail-grid">
+      ${rows.map(([label, v]) => `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${escapeHtml(String(v))}</div></div>`).join('')}
+    </div>
+    ${challenges ? `<div style="margin-top:10px;"><div class="detail-label">Reported challenges</div><div class="detail-value">${escapeHtml(challenges)}</div></div>` : ''}
+  `;
+}
+
 async function renderProfile(){
   const list = await loadBeneficiaryList();
   populateSelect('profileBeneficiarySelect', list);
@@ -3491,10 +3555,12 @@ async function renderProfile(){
 
   const recs = {};
   for(const p of PERIOD_ORDER){
-    const r = await loadAssessment(name, p);
+    const r = await loadAssessmentUnified(name, p);
     if(r) recs[p] = r;
   }
   const periodsWithData = PERIOD_ORDER.filter(p => recs[p]);
+
+  await renderProfileDemographic(name);
 
   const kpiRow = document.getElementById('profileKpiRow');
   if(periodsWithData.length === 0){
@@ -3548,8 +3614,11 @@ async function renderProfile(){
     const aii = computeAII(eri,bhi,sri);
     const g = (baseAii!==null && aii!==null && p!=='Baseline') ? aii-baseAii : null;
     const f = riskFlagFor(aii, g);
+    const sourceChip = r.seeded ? ' <span class="chip chip-grey" style="padding:2px 6px;">seeded</span>'
+      : r.source === 'self' ? ' <span class="chip chip-gold" style="padding:2px 6px;">self-reported</span>'
+      : '';
     return `<tr>
-      <td>${p}${r.seeded?' <span class="chip chip-grey" style="padding:2px 6px;">seeded</span>':''}</td>
+      <td>${p}${sourceChip}</td>
       <td>${eri?eri.pct.toFixed(1)+'%':'—'}</td>
       <td>${bhi?bhi.pct.toFixed(1)+'%':'—'}</td>
       <td>${sri?sri.pct.toFixed(1)+'%':'—'}</td>
