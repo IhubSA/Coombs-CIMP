@@ -1040,8 +1040,8 @@ function hideLoginScreen(){
 // back to the site).
 function showAuthPanel(which){
   document.getElementById('loginForm').style.display = which === 'signin' ? '' : 'none';
-  document.getElementById('forgotPasswordPanel').style.display = which === 'forgot' ? '' : 'none';
-  document.getElementById('resetPasswordPanel').style.display = which === 'reset' ? '' : 'none';
+  document.getElementById('forgotPasswordPanel').style.display = which === 'forgot' ? 'block' : 'none';
+  document.getElementById('resetPasswordPanel').style.display = which === 'reset' ? 'block' : 'none';
 }
 
 async function updateUserBadge(){
