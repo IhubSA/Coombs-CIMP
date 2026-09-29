@@ -2453,7 +2453,7 @@ async function sendInviteSms(phone, name, link){
         'apikey': SUPABASE_PUBLISHABLE_KEY,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ phone, message }),
+      body: JSON.stringify({ phone: normalizePhoneForSms(phone), message }),
     });
     const body = await res.json();
     if(!res.ok) throw new Error(body.error || 'Failed to send SMS');
@@ -2721,16 +2721,15 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_REV1", "My sales are increasing."],
       ["BHI_MKT2", "I receive repeat customers."],
       ["BHI_OPS1", "I have enough equipment/resources/ stock."],
-      ["SRI_OPS5", "I can identify business risks."],
-      ["SRI_GROW1", "I am prepared to manage business growth"],
+      ["BHI_EMP1", "My business creates employment or income opportunities."],
+      ["BHI_EMP3", "I support local suppliers where possible."],
     ],
     SRI: [
       ["SRI_GROW1", "I plan for future business growth."],
       ["SRI_GROW5", "I can adapt when business conditions change."],
       ["SRI_LEAD5", "I actively look for ways to improve my business."],
-      ["BHI_EMP1", "My business creates employment or income opportunities."],
-      ["BHI_EMP3", "I support local suppliers where possible."],
-      ["SRI_LEAD4", "I value customer and community relationships. \\"],
+      ["SRI_OPS5", "I can identify business risks."],
+      ["SRI_LEAD4", "I value customer and community relationships."],
     ],
   },
   Q1: {
@@ -4103,6 +4102,18 @@ function escapeHtml(s){
 // as an HTML entity for the attribute side.
 function jsAttr(s){
   return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+// BulkSMS requires full international format (no leading 0). Admins naturally
+// type South African numbers the local way (e.g. 0845900007), which BulkSMS
+// rejects with "The 'to' address cannot start with 0". This converts local
+// SA-style numbers to +27 format right before sending, without touching
+// whatever format is stored in the database (used for beneficiary login).
+function normalizePhoneForSms(phone){
+  let digits = String(phone || '').trim().replace(/[^\d+]/g, '');
+  if(digits.startsWith('+')) return digits;
+  if(digits.startsWith('0')) return '+27' + digits.slice(1);
+  if(digits.startsWith('27')) return '+' + digits;
+  return '+27' + digits; // fallback: assume a bare SA subscriber number
 }
 function paragraphs(text){
   const t = (text||'').trim();
