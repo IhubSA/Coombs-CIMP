@@ -1387,15 +1387,30 @@ async function enterBeneficiaryMode(name, opts){
   }
 
   const periods = ['Baseline','Q1','Q2','Q3','Q4'];
-  let nextPeriod = null;
+  // Baseline opens straight after registration. Q1 opens 14 days after
+  // Baseline is completed; Q2, Q3 and Q4 each open 90 days after the previous one.
+  const WAIT_DAYS = { Q1: 14, Q2: 90, Q3: 90, Q4: 90 };
+  let nextPeriod = null, prevSavedAt = null;
   for(const p of periods){
-    const { data } = await db.from('enterprise_survey_responses').select('id').eq('beneficiary', name).eq('period', p).maybeSingle();
+    const { data } = await db.from('enterprise_survey_responses').select('id,saved_at').eq('beneficiary', name).eq('period', p).maybeSingle();
     if(!data){ nextPeriod = p; break; }
+    prevSavedAt = data.saved_at;
   }
 
-  if(!nextPeriod){
+  let waitingUntil = null;
+  if(nextPeriod && nextPeriod !== 'Baseline' && prevSavedAt){
+    const opens = new Date(new Date(prevSavedAt).getTime() + WAIT_DAYS[nextPeriod] * 86400000);
+    if(Date.now() < opens.getTime()) waitingUntil = opens;
+  }
+
+  if(!nextPeriod || waitingUntil){
     document.getElementById('entSubDemo').style.display = 'none';
-    document.getElementById('entSubSurvey').innerHTML = `<div class="section-hint"><b>You're all caught up!</b> Thank you for completing every survey so far — we'll text you when your next one is due.</div>`;
+    const thanks = opts.justSaved && opts.justSaved !== 'demo'
+      ? `<b>✅ Thank you — your ${escapeHtml(opts.justSaved)} survey has been saved.</b><br><br>` : '';
+    const msg = waitingUntil
+      ? `<b>Your ${nextPeriod} survey opens on ${waitingUntil.toLocaleDateString(undefined, { day:'numeric', month:'long', year:'numeric' })}.</b><br>We'll send you an SMS with a link when it's ready. There's nothing more to do until then.`
+      : `<b>You're all caught up!</b> Thank you for completing every survey — there are no more surveys to do.`;
+    document.getElementById('entSubSurvey').innerHTML = `<div class="section-hint" style="border-left:4px solid var(--gold); padding:14px 16px; font-size:15px;">${thanks}${msg}</div>`;
     document.getElementById('entSubSurvey').style.display = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
