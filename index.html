@@ -502,6 +502,9 @@
     .mini-scale{gap:8px;}
     .kpi-row{grid-template-columns:1fr !important;}
   }
+  .upload-item{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:4px 0; }
+  .upload-name{ font-size:13px; word-break:break-all; }
+  .upload-btn{ display:inline-block; margin-top:6px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -767,6 +770,10 @@
       <div class="field">
         <label for="profileBeneficiarySelect">Beneficiary</label>
         <select id="profileBeneficiarySelect"></select>
+        <label style="display:flex; gap:8px; align-items:center; margin-top:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" id="profileIsCheck" style="width:auto;" />
+          Check participant — exclude from all statistics
+        </label>
       </div>
     </div>
 
@@ -935,11 +942,27 @@
           <label for="inviteCohortInput">Cohort</label>
           <input type="text" id="inviteCohortInput" list="knownCohorts" placeholder="e.g. Cohort 1" />
         </div>
+        <div class="field">
+          <label for="inviteHostOrgInput">Host organisation <span style="color:var(--ink-soft)">(shown in the consent wording)</span></label>
+          <input type="text" id="inviteHostOrgInput" placeholder="e.g. Angels Resource Centres" />
+        </div>
+        <div class="field" style="align-self:end;">
+          <label style="display:flex; gap:8px; align-items:center; cursor:pointer;">
+            <input type="checkbox" id="inviteIsCheck" style="width:auto;" />
+            Check participant (CLO / admin) — excluded from statistics
+          </label>
+        </div>
         <div>
           <button class="btn btn-primary btn-sm" id="createInviteBtn">Create invite</button>
         </div>
       </div>
       <div id="inviteCreateResult"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title">Programme settings</div>
+      <p class="section-hint">Set the host organisation for each programme. It replaces "Coombs Consulting" in the consent question on the Demographic Intake for everyone on that programme. Leave blank to use Coombs Consulting.</p>
+      <div id="programmeSettingsArea"><div class="empty-note">No programmes yet.</div></div>
     </div>
 
     <div class="card" style="margin-top:16px;">
@@ -1322,7 +1345,8 @@ async function enterApp(){
 // no admin nav, no picking other beneficiaries. This finds whichever
 // step is next (Demographic Intake, then Baseline/Q1/Q2/Q3/Q4 in order)
 // and shows only that, locking the beneficiary/period pickers to it.
-async function enterBeneficiaryMode(name){
+async function enterBeneficiaryMode(name, opts){
+  opts = opts || {};
   document.querySelector('.tabnav').style.display = 'none';
   ['view-dashboard','view-collect','view-monitor','view-profile','view-peii','view-report','view-sponsors','view-invites','view-interns']
     .forEach(id => { const el = document.getElementById(id); if(el) el.style.display = 'none'; });
@@ -1356,6 +1380,7 @@ async function enterBeneficiaryMode(name){
     document.getElementById('entSubDemo').style.display = 'none';
     document.getElementById('entSubSurvey').innerHTML = `<div class="section-hint"><b>You're all caught up!</b> Thank you for completing every survey so far — we'll text you when your next one is due.</div>`;
     document.getElementById('entSubSurvey').style.display = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
 
@@ -1364,6 +1389,22 @@ async function enterBeneficiaryMode(name){
   if(periodSetup) periodSetup.style.display = 'none';
   document.getElementById('entPeriodSelect').value = nextPeriod;
   await switchEnterpriseContext();
+
+  // Tell the beneficiary what just happened and what to do next, and bring
+  // them to the top of the page (otherwise they land at the bottom of the
+  // long survey they've just scrolled through the intake form to reach).
+  const old = document.getElementById('benNotice'); if(old) old.remove();
+  let msg = '';
+  if(opts.justSaved === 'demo'){
+    msg = `<b>✅ Thank you — your intake form has been saved.</b><br>Next step: please complete the <b>${nextPeriod === 'Baseline' ? 'Baseline survey' : nextPeriod + ' survey'}</b> below.`;
+  } else if(opts.justSaved){
+    msg = `<b>✅ Thank you — your ${escapeHtml(opts.justSaved)} survey has been saved.</b><br>Next step: please complete the <b>${nextPeriod} survey</b> below.`;
+  }
+  if(msg){
+    document.getElementById('entSubSurvey').insertAdjacentHTML('afterbegin',
+      `<div class="section-hint" id="benNotice" style="margin-bottom:12px; border-left:4px solid var(--gold); padding:12px 14px; font-size:14px;">${msg}</div>`);
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ============================ DATA ============================ */
@@ -1833,8 +1874,9 @@ function recompute(){
 async function loadBeneficiaryList(){
   let list = [...DEFAULT_BENEFICIARIES];
   beneficiaryMeta = {};
+  checkNames = new Set();
   try{
-    const { data, error } = await db.from('beneficiaries').select('name,programme,cohort').order('name');
+    const { data, error } = await db.from('beneficiaries').select('name,programme,cohort,is_check').order('name');
     if(error) throw error;
     if(data){
       // Seed the DB with the built-in defaults the first time it's empty.
@@ -1843,7 +1885,8 @@ async function loadBeneficiaryList(){
       } else {
         data.forEach(row => {
           if(!list.includes(row.name)) list.push(row.name);
-          beneficiaryMeta[row.name] = { programme: row.programme || null, cohort: row.cohort || null };
+          beneficiaryMeta[row.name] = { programme: row.programme || null, cohort: row.cohort || null, is_check: !!row.is_check };
+          if(row.is_check) checkNames.add(row.name);
         });
       }
     }
@@ -1862,7 +1905,7 @@ async function saveBeneficiaryList(list){
 
 function populateBeneficiarySelect(list){
   const sel = document.getElementById('beneficiarySelect');
-  sel.innerHTML = list.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.innerHTML = list.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(benLabel(n))}</option>`).join('');
 }
 
 async function loadAssessment(beneficiary, period){
@@ -2049,6 +2092,7 @@ async function loadAllAssessments(){
   const list = await loadBeneficiaryList();
   let records = [];
   for(const name of list){
+    if(checkNames.has(name)) continue; // check participants never count towards statistics
     for(const p of PERIOD_ORDER){
       const rec = await loadAssessmentUnified(name, p).catch(()=>null);
       if(rec) records.push(rec);
@@ -2250,7 +2294,7 @@ function switchTab(tab){
   if(tab === 'peii'){ switchPeiiContext(); renderPeiiSummary(); }
   if(tab === 'report'){ switchReportContext(); }
   if(tab === 'sponsors'){ renderSponsorPortal(); }
-  if(tab === 'invites'){ renderInviteList(); }
+  if(tab === 'invites'){ renderInviteList(); renderProgrammeSettings(); }
   if(tab === 'enterprise'){ switchEnterpriseContext(); }
   if(tab === 'interns'){ renderInternVisitHistory(); }
 }
@@ -2413,10 +2457,16 @@ async function createInvite(){
   const cohort = document.getElementById('inviteCohortInput').value.trim();
   const resultEl = document.getElementById('inviteCreateResult');
   resultEl.innerHTML = '';
+  const hostOrg = document.getElementById('inviteHostOrgInput').value.trim();
+  const isCheck = document.getElementById('inviteIsCheck').checked;
   if(!name || !phone || !programme || !cohort){ showToast('Fill in all fields'); return; }
   try{
+    if(hostOrg){
+      const { error: hoErr } = await db.from('programme_settings').upsert({ programme, host_org: hostOrg, updated_at: new Date().toISOString() }, { onConflict: 'programme' });
+      if(hoErr) throw hoErr;
+    }
     const { data, error } = await db.from('beneficiary_invites')
-      .insert({ name, phone, programme, cohort })
+      .insert({ name, phone, programme, cohort, is_check: isCheck })
       .select('token').single();
     if(error) throw error;
     const link = `${window.location.origin}/signup.html?token=${data.token}`;
@@ -2430,8 +2480,10 @@ async function createInvite(){
       </div>`;
     document.getElementById('inviteNameInput').value = '';
     document.getElementById('invitePhoneInput').value = '';
+    document.getElementById('inviteIsCheck').checked = false;
     showToast(`Invite created for ${name}`);
     renderInviteList();
+    renderProgrammeSettings();
   }catch(e){ console.error(e); showToast('Could not create invite — please try again'); }
 }
 
@@ -2469,6 +2521,37 @@ async function loadInvites(){
   }catch(e){ console.error('Failed to load invites', e); return []; }
 }
 
+async function renderProgrammeSettings(){
+  const area = document.getElementById('programmeSettingsArea');
+  if(!area) return;
+  await loadProgrammeSettings();
+  const names = new Set(Object.keys(programmeHostOrg));
+  try{
+    const [a, b] = await Promise.all([
+      db.from('beneficiaries').select('programme'),
+      db.from('beneficiary_invites').select('programme'),
+    ]);
+    [...(a.data||[]), ...(b.data||[])].forEach(r => { if(r.programme) names.add(r.programme); });
+  }catch(e){ console.error(e); }
+  const list = [...names].sort();
+  if(!list.length){ area.innerHTML = '<div class="empty-note">No programmes yet.</div>'; return; }
+  area.innerHTML = list.map(pn => `
+    <div class="invite-row">
+      <div class="invite-meta"><b>${escapeHtml(pn)}</b></div>
+      <div class="invite-row-actions">
+        <input type="text" data-prog="${escapeHtml(pn)}" value="${escapeHtml(programmeHostOrg[pn] || '')}" placeholder="Coombs Consulting (default)" style="min-width:220px;" />
+        <button class="btn btn-primary btn-sm" type="button" data-prog-save="${escapeHtml(pn)}">Save</button>
+      </div>
+    </div>`).join('');
+  area.querySelectorAll('[data-prog-save]').forEach(btn => btn.addEventListener('click', async () => {
+    const pn = btn.getAttribute('data-prog-save');
+    const val = Array.from(area.querySelectorAll('[data-prog]')).find(i => i.getAttribute('data-prog') === pn).value.trim();
+    const { error } = await db.from('programme_settings').upsert({ programme: pn, host_org: val || null, updated_at: new Date().toISOString() }, { onConflict: 'programme' });
+    if(error){ console.error(error); showToast('Could not save — please try again'); return; }
+    showToast(`Saved host organisation for ${pn}`);
+  }));
+}
+
 async function renderInviteList(){
   const invites = await loadInvites();
   const area = document.getElementById('inviteListArea');
@@ -2482,7 +2565,7 @@ async function renderInviteList(){
       <div class="invite-row">
         <div class="invite-meta">
           <b>${escapeHtml(inv.name)}</b> · ${escapeHtml(inv.phone)} · ${escapeHtml(inv.programme)} / ${escapeHtml(inv.cohort)}
-          &nbsp;${statusChip}
+          &nbsp;${statusChip}${inv.is_check ? ' <span class="chip chip-grey">Check</span>' : ''}
         </div>
         ${inv.status === 'pending' ? `
         <div class="invite-row-actions">
@@ -2590,13 +2673,22 @@ async function countRows(table){
   }catch(e){ console.error(`Failed to count ${table}`, e); return 0; }
 }
 
+// Row count that leaves out check participants.
+async function countRowsStats(table){
+  try{
+    const { data, error } = await db.from(table).select('beneficiary');
+    if(error) throw error;
+    return (data||[]).filter(r => !checkNames.has(r.beneficiary)).length;
+  }catch(e){ console.error(`Failed to count ${table}`, e); return 0; }
+}
+
 async function groupByPeriod(table, periods){
   try{
-    const { data, error } = await db.from(table).select('period');
+    const { data, error } = await db.from(table).select('period,beneficiary');
     if(error) throw error;
     const counts = {};
     periods.forEach(p => counts[p] = 0);
-    (data || []).forEach(row => { if(counts[row.period] !== undefined) counts[row.period]++; });
+    (data || []).forEach(row => { if(!checkNames.has(row.beneficiary) && counts[row.period] !== undefined) counts[row.period]++; });
     return counts;
   }catch(e){ console.error(`Failed to group ${table} by period`, e); return {}; }
 }
@@ -2607,15 +2699,17 @@ let dashEnterpriseChartInstance = null;
 async function renderDashboard(){
   const kpiRow = document.getElementById('dashKpiRow');
   kpiRow.innerHTML = `<div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-label">Loading…</div></div>`;
+  await loadBeneficiaryList(); // refreshes the set of check participants
 
   const [
     beneficiaryCount, sponsorCount, cohortAllocCount, internCount,
     assessmentCount, enterpriseSurveyCount, peiiCount, internVisitCount,
     demographicCount, narrativeCount, jrCount,
   ] = await Promise.all([
-    countRows('beneficiaries'), countRows('sponsors'), countRows('cohort_sponsors'), countRows('interns'),
-    countRows('assessments'), countRows('enterprise_survey_responses'), countRows('peii_entries'), countRows('intern_site_visits'),
-    countRows('enterprise_demographics'), countRows('narrative_reports'), countRows('jobs_revenue'),
+    db.from('beneficiaries').select('*', { count: 'exact', head: true }).eq('is_check', false).then(r => r.count || 0),
+    countRows('sponsors'), countRows('cohort_sponsors'), countRows('interns'),
+    countRowsStats('assessments'), countRowsStats('enterprise_survey_responses'), countRowsStats('peii_entries'), countRows('intern_site_visits'),
+    countRowsStats('enterprise_demographics'), countRowsStats('narrative_reports'), countRows('jobs_revenue'),
   ]);
 
   kpiRow.innerHTML = `
@@ -2981,11 +3075,103 @@ const ENTERPRISE_SURVEY_LIBRARY = {
     ],
   },
 };
+let checkNames = new Set();      // internal "check" participants — excluded from all statistics
+let programmeHostOrg = {};       // { programme: host organisation name }
+let currentHostOrg = 'Coombs Consulting';
+const DOC_BUCKET = 'beneficiary-documents';
+
+function nameSlug(n){ return String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+function benLabel(n){ return checkNames.has(n) ? n + ' (check)' : n; }
+
+async function loadProgrammeSettings(){
+  programmeHostOrg = {};
+  try{
+    const { data, error } = await db.from('programme_settings').select('programme,host_org');
+    if(error) throw error;
+    (data||[]).forEach(r => { if(r.host_org) programmeHostOrg[r.programme] = r.host_org; });
+  }catch(e){ console.error('Failed to load programme settings', e); }
+  return programmeHostOrg;
+}
+
+// Which organisation hosts the programme this beneficiary is on (used in the
+// consent wording). Falls back to Coombs Consulting if none has been set.
+async function resolveHostOrg(beneficiary){
+  currentHostOrg = 'Coombs Consulting';
+  try{
+    const { data: b } = await db.from('beneficiaries').select('programme').eq('name', beneficiary).maybeSingle();
+    if(b && b.programme){
+      const { data: ps } = await db.from('programme_settings').select('host_org').eq('programme', b.programme).maybeSingle();
+      if(ps && ps.host_org) currentHostOrg = ps.host_org;
+    }
+  }catch(e){ console.error('Failed to resolve host organisation', e); }
+  return currentHostOrg;
+}
+
+function demoLabel(f){ return escapeHtml(f.label.replace('{host_org}', currentHostOrg)); }
+
+function uploadFileList(fieldId){
+  const v = demographicAnswers[fieldId];
+  return Array.isArray(v) ? v : [];
+}
+
+function uploadControlHtml(field, value){
+  const files = Array.isArray(value) ? value : [];
+  const legacy = (typeof value === 'string' && value.trim()) ? `<div class="section-hint">Earlier note: ${escapeHtml(value)}</div>` : '';
+  return `${legacy}
+    <div class="upload-list" id="uplist_${field.id}">
+      ${files.map((f,i) => `<div class="upload-item"><span class="upload-name">📄 ${escapeHtml(f.name)}</span>
+        <button type="button" class="btn btn-sm" onclick="viewDocument('${jsAttr(f.path)}')">View</button>
+        <button type="button" class="btn btn-sm" onclick="removeUpload('${field.id}', ${i})">Remove</button></div>`).join('')}
+    </div>
+    <label class="upload-btn">
+      <input type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="handleUpload('${field.id}', this)" />
+      <span class="btn btn-sm btn-primary" style="pointer-events:none;">＋ Choose file / take photo</span>
+    </label>
+    <div class="section-hint" id="upstatus_${field.id}" style="margin-top:4px;">Photos or PDFs, up to 10 MB each.</div>`;
+}
+
+async function handleUpload(fieldId, input){
+  const beneficiary = document.getElementById('entBeneficiarySelect').value;
+  if(!beneficiary){ showToast('Select a beneficiary first'); return; }
+  const status = document.getElementById('upstatus_' + fieldId);
+  const files = Array.from(input.files || []);
+  if(!files.length) return;
+  const list = uploadFileList(fieldId).slice();
+  for(const file of files){
+    if(file.size > 10*1024*1024){ showToast(file.name + ' is over 10 MB'); continue; }
+    if(status) status.textContent = 'Uploading ' + file.name + '…';
+    const safe = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g,'-');
+    const path = `${nameSlug(beneficiary)}/${fieldId}/${Date.now()}-${safe}`;
+    const { error } = await db.storage.from(DOC_BUCKET).upload(path, file, { contentType: file.type || undefined });
+    if(error){ console.error(error); showToast('Could not upload ' + file.name + ' — please try again'); continue; }
+    list.push({ path, name: file.name, size: file.size });
+  }
+  demographicAnswers[fieldId] = list;
+  buildDemographicForm();
+  showToast('Uploaded — remember to press Save');
+}
+
+async function removeUpload(fieldId, idx){
+  const list = uploadFileList(fieldId).slice();
+  const f = list[idx];
+  if(!f) return;
+  try{ await db.storage.from(DOC_BUCKET).remove([f.path]); }catch(e){ console.error(e); }
+  list.splice(idx,1);
+  demographicAnswers[fieldId] = list;
+  buildDemographicForm();
+}
+
+async function viewDocument(path){
+  const { data, error } = await db.storage.from(DOC_BUCKET).createSignedUrl(path, 300);
+  if(error || !data){ console.error(error); showToast('Could not open the document'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+
 const DEMOGRAPHIC_FIELDS = [
   { section: "Personal Details", fields: [
     { id: "full_name", label: "Full name and surname (as per ID)", type: "text" },
     { id: "id_number", label: "ID Number", type: "text" },
-    { id: "id_document_ref", label: "ID document (reference / filed separately)", type: "text" },
+    { id: "id_document_ref", label: "ID document (upload a clear photo or PDF)", type: "upload" },
     { id: "age", label: "Age", type: "number" },
     { id: "gender", label: "Gender", type: "radio", options: ["Male", "Female"] },
     { id: "town", label: "Which town do you live in?", type: "text" },
@@ -3012,7 +3198,7 @@ const DEMOGRAPHIC_FIELDS = [
   ]},
   { section: "Business Status", fields: [
     { id: "compliance", label: "Is your business compliant? (Select all that apply)", type: "checkboxes", options: ["CIPC registered", "BBEE Certificate/Affidavit", "Tax Clearance Certificate", "Other"] },
-    { id: "compliance_docs_ref", label: "Compliance documents (reference / filed separately)", type: "text" },
+    { id: "compliance_docs_ref", label: "Compliance documents (upload photos or PDFs — you can add more than one)", type: "upload" },
   ]},
   { section: "Business Revenue", fields: [
     { id: "monthly_revenue", label: "What is your current monthly revenue (in Rands)?", type: "number" },
@@ -3044,7 +3230,7 @@ const DEMOGRAPHIC_FIELDS = [
   { section: "Consent", fields: [
     { id: "consent_marketing", label: "Do you consent to Coombs Consulting using your photos and/or videos for marketing and social media purposes?", type: "radio", options: ["Yes", "No"] },
     { id: "consent_travel", label: "I hereby confirm that I voluntarily participate in this programme and acknowledge that I might be required to travel for certain activities. I indemnify Coombs Consulting and its appointed service providers from any claims for damage, injury, or loss that may occur during any travel as part of the programme.", type: "radio", options: ["I Agree", "I Disagree"] },
-    { id: "consent_popia", label: "As a participant in programmes hosted by Coombs Consulting, I understand that my personal information may be collected and used for training, administration, identity verification, reporting, communication and research purposes.", type: "radio", options: ["Yes", "No"] },
+    { id: "consent_popia", label: "As a participant in programmes hosted by {host_org}, I understand that my personal information may be collected and used for training, administration, identity verification, reporting, communication and research purposes.", type: "radio", options: ["Yes", "No"] },
     { id: "declaration", label: "I confirm that the information provided is accurate to the best of my knowledge and may be used for programme monitoring and reporting.", type: "radio", options: ["Yes", "No"] },
   ]},
 ];
@@ -3054,6 +3240,7 @@ let enterpriseSurveyScores = {};
 
 function fieldControlHtml(field, value){
   const v = value === undefined || value === null ? '' : value;
+  if(field.type === 'upload') return uploadControlHtml(field, value);
   if(field.type === 'text' || field.type === 'number'){
     return `<input type="${field.type}" data-demo-field="${field.id}" value="${(v+'').replace(/"/g,'&quot;')}" />`;
   }
@@ -3089,8 +3276,8 @@ function buildDemographicForm(){
       <div class="demo-section-title">${section.section}</div>
       <div class="demo-grid">
         ${section.fields.map(f => `
-          <div class="demo-field ${f.type==='textarea'||f.type==='checkboxes'?'field-wide':''}">
-            <label>${f.label}</label>
+          <div class="demo-field ${f.type==='textarea'||f.type==='checkboxes'||f.type==='upload'?'field-wide':''}">
+            <label>${demoLabel(f)}</label>
             ${fieldControlHtml(f, demographicAnswers[f.id])}
           </div>
         `).join('')}
@@ -3143,7 +3330,7 @@ async function saveDemographic(){
     // A beneficiary completing their own onboarding moves straight on to
     // their Baseline survey — there's no subnav for them to click through to it.
     if(currentUserRole && currentUserRole.role === 'beneficiary'){
-      await enterBeneficiaryMode(beneficiary);
+      await enterBeneficiaryMode(beneficiary, { justSaved: 'demo' });
     }
   }catch(e){ console.error(e); showToast('Could not save — please try again'); }
 }
@@ -3210,7 +3397,7 @@ async function saveEnterpriseSurvey(){
     // Move a beneficiary on to whichever period is next (or the "all
     // caught up" message) — they have no subnav to navigate manually.
     if(currentUserRole && currentUserRole.role === 'beneficiary'){
-      await enterBeneficiaryMode(beneficiary);
+      await enterBeneficiaryMode(beneficiary, { justSaved: period });
     }
   }catch(e){ console.error(e); showToast('Could not save — please try again'); }
 }
@@ -3221,6 +3408,7 @@ async function switchEnterpriseContext(){
 
   const demo = await loadDemographic(beneficiary);
   demographicAnswers = demo ? demo.data : {};
+  await resolveHostOrg(beneficiary);
   buildDemographicForm();
   document.getElementById('demoSavedNote').textContent = demo ? `Last saved ${new Date(demo.savedAt).toLocaleString()}` : 'Not yet completed for this beneficiary.';
 
@@ -3567,7 +3755,7 @@ let profileChartInstance = null;
 function populateSelect(id, list){
   const sel = document.getElementById(id);
   const prev = sel.value;
-  sel.innerHTML = list.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.innerHTML = list.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(benLabel(n))}</option>`).join('');
   if(list.includes(prev)) sel.value = prev;
 }
 
@@ -3598,6 +3786,10 @@ async function renderProfileDemographic(name){
       ${rows.map(([label, v]) => `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${escapeHtml(String(v))}</div></div>`).join('')}
     </div>
     ${challenges ? `<div style="margin-top:10px;"><div class="detail-label">Reported challenges</div><div class="detail-value">${escapeHtml(challenges)}</div></div>` : ''}
+    ${[['ID document', d.id_document_ref], ['Compliance documents', d.compliance_docs_ref]].map(([label, v]) => {
+      if(!Array.isArray(v) || !v.length) return typeof v === 'string' && v.trim() ? `<div style="margin-top:10px;"><div class="detail-label">${label}</div><div class="detail-value">${escapeHtml(v)}</div></div>` : '';
+      return `<div style="margin-top:10px;"><div class="detail-label">${label}</div>${v.map(f => `<div class="upload-item"><span class="upload-name">📄 ${escapeHtml(f.name)}</span> <button type="button" class="btn btn-sm" onclick="viewDocument('${jsAttr(f.path)}')">View</button></div>`).join('')}</div>`;
+    }).join('')}
   `;
 }
 
@@ -3606,6 +3798,7 @@ async function renderProfile(){
   populateSelect('profileBeneficiarySelect', list);
   const name = document.getElementById('profileBeneficiarySelect').value;
   if(!name) return;
+  document.getElementById('profileIsCheck').checked = checkNames.has(name);
 
   const recs = {};
   for(const p of PERIOD_ORDER){
@@ -3822,6 +4015,7 @@ async function renderPeiiSummary(){
   const list = await loadBeneficiaryList();
   const rows = [];
   for(const name of list){
+    if(checkNames.has(name)) continue;
     const quarters = {};
     let any = false;
     for(const q of ['Q1','Q2','Q3','Q4']){
@@ -4453,6 +4647,11 @@ function bindStaticEventListeners(){
   document.getElementById('tabBtnSponsors').addEventListener('click', () => switchTab('sponsors'));
   document.getElementById('tabBtnInvites').addEventListener('click', () => switchTab('invites'));
   document.getElementById('createInviteBtn').addEventListener('click', createInvite);
+  document.getElementById('inviteProgrammeInput').addEventListener('change', async () => {
+    await loadProgrammeSettings();
+    const ho = programmeHostOrg[document.getElementById('inviteProgrammeInput').value.trim()];
+    if(ho) document.getElementById('inviteHostOrgInput').value = ho;
+  });
   document.getElementById('tabBtnEnterprise').addEventListener('click', () => switchTab('enterprise'));
   document.getElementById('tabBtnInterns').addEventListener('click', () => switchTab('interns'));
   document.getElementById('jrSaveBtn').addEventListener('click', saveJR);
@@ -4464,6 +4663,14 @@ function bindStaticEventListeners(){
   document.getElementById('cohortInput').addEventListener('input', renderSponsorHint);
 
   document.getElementById('profileBeneficiarySelect').addEventListener('change', renderProfile);
+  document.getElementById('profileIsCheck').addEventListener('change', async (e) => {
+    const name = document.getElementById('profileBeneficiarySelect').value;
+    if(!name) return;
+    const { error } = await db.from('beneficiaries').update({ is_check: e.target.checked }).eq('name', name);
+    if(error){ console.error(error); showToast('Could not update — please try again'); e.target.checked = !e.target.checked; return; }
+    showToast(e.target.checked ? `${name} is now a check participant (excluded from stats)` : `${name} now counts towards statistics`);
+    await renderProfile();
+  });
 
   document.getElementById('reportBeneficiarySelect').addEventListener('change', switchReportContext);
   document.getElementById('reportSelect').addEventListener('change', switchSelectedReport);
