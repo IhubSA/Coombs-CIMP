@@ -1400,10 +1400,11 @@ async function enterBeneficiaryMode(name, opts){
   } else if(opts.justSaved){
     msg = `<b>✅ Thank you — your ${escapeHtml(opts.justSaved)} survey has been saved.</b><br>Next step: please complete the <b>${nextPeriod} survey</b> below.`;
   }
-  if(msg){
-    document.getElementById('entSubSurvey').insertAdjacentHTML('afterbegin',
-      `<div class="section-hint" id="benNotice" style="margin-bottom:12px; border-left:4px solid var(--gold); padding:12px 14px; font-size:14px;">${msg}</div>`);
-  }
+  document.getElementById('entSubSurvey').insertAdjacentHTML('afterbegin',
+    `<div id="benNotice" style="margin-bottom:14px;">
+      <h2 style="font-size:26px; font-weight:800; margin:0 0 10px;">Complete the Assessment</h2>
+      ${msg ? `<div class="section-hint" style="border-left:4px solid var(--gold); padding:12px 14px; font-size:14px;">${msg}</div>` : ''}
+    </div>`);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
