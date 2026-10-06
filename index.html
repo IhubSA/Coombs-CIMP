@@ -860,8 +860,19 @@
   <div id="view-report" style="display:none">
     <div class="setup report-meta-row" id="reportSetupBar">
       <div class="field">
+        <label for="reportTypeSelect">Report type</label>
+        <select id="reportTypeSelect">
+          <option value="beneficiary">Beneficiary report</option>
+          <option value="cohort">Client / Cohort report</option>
+        </select>
+      </div>
+      <div class="field" id="reportBeneficiaryField">
         <label for="reportBeneficiarySelect">Beneficiary</label>
         <select id="reportBeneficiarySelect"></select>
+      </div>
+      <div class="field" id="reportCohortField" style="display:none;">
+        <label for="reportCohortSelect">Client / Cohort</label>
+        <select id="reportCohortSelect"></select>
       </div>
       <div class="field">
         <label for="reportSelect">Report</label>
@@ -884,31 +895,31 @@
     <div class="card" style="margin-top:18px;">
 
       <div class="report-section">
-        <div class="report-section-head"><span class="report-section-num">1</span><span class="section-title">Beneficiary overview</span></div>
+        <div class="report-section-head"><span class="report-section-num">1</span><span class="section-title" id="rsTitle1">Beneficiary overview</span></div>
         <div class="stat-block" id="statOverview"></div>
         <textarea class="narrative-textarea" id="narrOverview" placeholder="Describe the beneficiary's business, context and background relevant to this reporting period..."></textarea>
       </div>
 
       <div class="report-section">
-        <div class="report-section-head"><span class="report-section-num">2</span><span class="section-title">Diagnostic assessment findings</span></div>
+        <div class="report-section-head"><span class="report-section-num">2</span><span class="section-title" id="rsTitle2">Diagnostic assessment findings</span></div>
         <div class="stat-block" id="statDiagnostic"></div>
         <textarea class="narrative-textarea" id="narrDiagnostic" placeholder="Comment on the ERI, BHI and SRI results — what is driving strong or weak performance in each area..."></textarea>
       </div>
 
       <div class="report-section">
-        <div class="report-section-head"><span class="report-section-num">3</span><span class="section-title">Growth, risk &amp; recommended action</span></div>
+        <div class="report-section-head"><span class="report-section-num">3</span><span class="section-title" id="rsTitle3">Growth, risk &amp; recommended action</span></div>
         <div class="stat-block" id="statGrowth"></div>
         <textarea class="narrative-textarea" id="narrGrowth" placeholder="Explain the growth trajectory and risk flag, and what action is planned or already underway..."></textarea>
       </div>
 
       <div class="report-section">
-        <div class="report-section-head"><span class="report-section-num">4</span><span class="section-title">Programme experience (PEII)</span></div>
+        <div class="report-section-head"><span class="report-section-num">4</span><span class="section-title" id="rsTitle4">Programme experience (PEII)</span></div>
         <div class="stat-block" id="statPeii"></div>
         <textarea class="narrative-textarea" id="narrPeii" placeholder="Reflect on the beneficiary's engagement with mentorship, workshops and programme support..."></textarea>
       </div>
 
       <div class="report-section" style="margin-bottom:4px;">
-        <div class="report-section-head"><span class="report-section-num">5</span><span class="section-title">Overall conclusion &amp; recommendations</span></div>
+        <div class="report-section-head"><span class="report-section-num">5</span><span class="section-title" id="rsTitle5">Overall conclusion &amp; recommendations</span></div>
         <textarea class="narrative-textarea" id="narrOverall" placeholder="Summarise overall progress and set out recommendations for the next reporting period..."></textarea>
       </div>
 
@@ -4089,6 +4100,234 @@ async function renderPeiiSummary(){
 // rather than a single row that gets overwritten on every save.
 let currentReportId = null;      // id of the report currently loaded in the form, or null for a new/unsaved one
 let currentReportNumber = null;  // report_number shown/saved for the current form
+let currentReportType = 'beneficiary'; // 'beneficiary' | 'cohort'
+
+const REPORT_UI = {
+  beneficiary: {
+    titles: ['Beneficiary overview','Diagnostic assessment findings','Growth, risk & recommended action','Programme experience (PEII)','Overall conclusion & recommendations'],
+    ph: ["Describe the beneficiary's business, context and background relevant to this reporting period...",
+         "Comment on the ERI, BHI and SRI results — what is driving strong or weak performance in each area...",
+         "Explain the growth trajectory and risk flag, and what action is planned or already underway...",
+         "Reflect on the beneficiary's engagement with mentorship, workshops and programme support...",
+         "Summarise overall progress and set out recommendations for the next reporting period..."],
+  },
+  cohort: {
+    titles: ['Cohort overview','Cohort diagnostic findings','Growth, risk & recommended action','Programme experience (PEII)','Overall conclusion & recommendations'],
+    ph: ["Describe the cohort — who the participants are, the programme context and the reporting period...",
+         "Comment on the cohort's ERI, BHI and SRI results — where the cohort is strong, where it is weak, and why...",
+         "Explain the cohort's growth since baseline, which participants are at risk, and what support is planned or underway...",
+         "Reflect on how the cohort has engaged with mentorship, workshops and programme support...",
+         "Summarise the cohort's overall progress for the client and set out recommendations for the next period..."],
+  },
+};
+
+function applyReportTypeUI(){
+  const isCohort = currentReportType === 'cohort';
+  document.getElementById('reportBeneficiaryField').style.display = isCohort ? 'none' : '';
+  document.getElementById('reportCohortField').style.display = isCohort ? '' : 'none';
+  const ui = REPORT_UI[currentReportType];
+  ui.titles.forEach((t,i) => { document.getElementById('rsTitle'+(i+1)).textContent = t; });
+  ['narrOverview','narrDiagnostic','narrGrowth','narrPeii','narrOverall'].forEach((id,i) => { document.getElementById(id).placeholder = ui.ph[i]; });
+}
+
+// ---------- Client / Cohort report data ----------
+function splitCohortKey(key){ const i = key.indexOf('::'); return { programme: key.slice(0,i), cohort: key.slice(i+2) }; }
+
+async function populateCohortSelect(){
+  await loadBeneficiaryList();
+  const combos = new Map();
+  Object.entries(beneficiaryMeta).forEach(([n, m]) => {
+    if(m.programme && m.cohort && !checkNames.has(n)) combos.set(cohortMapKey(m.programme, m.cohort), true);
+  });
+  const known = await discoverKnownCohorts();
+  known.forEach((v,k) => combos.set(k, true));
+  const map = await loadCohortMap();
+  Object.keys(map).forEach(k => combos.set(k, true));
+  const sponsors = await loadSponsors();
+  const sel = document.getElementById('reportCohortSelect');
+  const prev = sel.value;
+  const keys = [...combos.keys()].sort();
+  sel.innerHTML = keys.map(k => {
+    const { programme, cohort } = splitCohortKey(k);
+    const sp = sponsors.find(x => x.id === map[k]);
+    return `<option value="${escapeHtml(k)}">${escapeHtml(programme)} — ${escapeHtml(cohort)}${sp ? ' ('+escapeHtml(sp.name)+')' : ''}</option>`;
+  }).join('') || '<option value="">No cohorts yet</option>';
+  if(keys.includes(prev)) sel.value = prev;
+}
+
+async function gatherCohortData(key){
+  const { programme, cohort } = splitCohortKey(key);
+  await loadBeneficiaryList();
+  const members = Object.keys(beneficiaryMeta).filter(n => {
+    const m = beneficiaryMeta[n];
+    return m.programme === programme && m.cohort === cohort && !checkNames.has(n);
+  });
+  const perBen = [];
+  for(const n of members) perBen.push(await gatherBeneficiaryData(n));
+
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  const periods = PERIOD_ORDER.map(p => {
+    const recs = perBen.filter(d => d.recs[p]).map(d => d.recs[p]);
+    if(!recs.length) return null;
+    const eri = avg(recs.map(r=>indexPctForRecord(r,'ERI')).filter(Boolean).map(x=>x.pct));
+    const bhi = avg(recs.map(r=>indexPctForRecord(r,'BHI')).filter(Boolean).map(x=>x.pct));
+    const sri = avg(recs.map(r=>indexPctForRecord(r,'SRI')).filter(Boolean).map(x=>x.pct));
+    const present = [eri,bhi,sri].filter(v=>v!==null);
+    let aii = null;
+    if(eri!==null && bhi!==null && sri!==null) aii = eri*0.3 + bhi*0.4 + sri*0.3;
+    else if(present.length) aii = avg(present);
+    return { period: p, n: recs.length, eri, bhi, sri, aii };
+  }).filter(Boolean);
+  const latest = periods.length ? periods[periods.length-1] : null;
+  const base = periods.find(x => x.period === 'Baseline') || null;
+  const growth = (latest && base && latest.period !== 'Baseline' && latest.aii!==null && base.aii!==null) ? latest.aii - base.aii : null;
+
+  const rows = perBen.map(d => ({ name: d.name, latestP: d.latestP, aii: d.latestAii, growth: d.growth, flag: d.flag }));
+  const flagCounts = {};
+  rows.forEach(r => { flagCounts[r.flag] = (flagCounts[r.flag]||0) + 1; });
+  const rag = {};
+  rows.forEach(r => { const l = ragFor(r.aii).label; rag[l] = (rag[l]||0) + 1; });
+
+  const peiiByQ = ['Q1','Q2','Q3','Q4'].map(q => {
+    const vals = perBen.map(d => d.peiiRecs.find(r => r.quarter === q)).filter(Boolean).map(r => r.pct).filter(v => v!==null && v!==undefined);
+    return vals.length ? { quarter: q, n: vals.length, pct: avg(vals) } : null;
+  }).filter(Boolean);
+
+  const tally = fn => {
+    const c = {};
+    perBen.forEach(d => { const v = d.demo && d.demo.data ? fn(d.demo.data) : null; if(v) c[v] = (c[v]||0)+1; });
+    return Object.entries(c).sort((a,b)=>b[1]-a[1]);
+  };
+  const demoCount = perBen.filter(d => d.demo && d.demo.data && Object.keys(d.demo.data).length).length;
+
+  const map = await loadCohortMap();
+  const sponsors = await loadSponsors();
+  const sp = sponsors.find(x => x.id === map[key]);
+
+  return { isCohort: true, key, programme, cohort, sponsor: sp ? sp.name : null,
+    memberCount: members.length, periods, latest, base, growth, rows, flagCounts, rag, peiiByQ,
+    gender: tally(d => d.gender), stage: tally(d => d.business_category), industry: tally(d => d.industry), demoCount };
+}
+
+function pctTxt(v){ return v!==null && v!==undefined ? v.toFixed(1)+'%' : '—'; }
+function tallyTxt(arr){ return arr.length ? arr.map(([k,n]) => `${escapeHtml(k)} (${n})`).join(', ') : '—'; }
+
+function renderCohortStats(d){
+  const flagCls = {High:'chip-red',Declining:'chip-orange',Medium:'chip-orange',Watch:'chip-yellow',Low:'chip-green','No Data':'chip-grey'};
+  document.getElementById('statOverview').innerHTML = `
+    <b>${escapeHtml(d.programme)} — ${escapeHtml(d.cohort)}</b>${d.sponsor ? ' · Client: <b>'+escapeHtml(d.sponsor)+'</b>' : ''}<br>
+    Participants: <b>${d.memberCount}</b> · With an assessment on record: <b>${d.latest ? d.latest.n : 0}</b> (latest period: <b>${d.latest ? d.latest.period : '—'}</b>)<br>
+    ${d.latest ? `Cohort Overall Impact Index (AII): <b>${pctTxt(d.latest.aii)}</b> <span class="chip ${ragFor(d.latest.aii).cls}" style="margin-left:6px;">${ragFor(d.latest.aii).label}</span>${d.base ? ' · Baseline AII: <b>'+pctTxt(d.base.aii)+'</b>' : ''}<br>` : ''}
+    ${d.demoCount ? `Gender: ${tallyTxt(d.gender)}<br>Business stage: ${tallyTxt(d.stage)}<br>Industry: ${tallyTxt(d.industry)}` : '<span class="empty-note">No demographic intakes on record for this cohort yet.</span>'}`;
+
+  document.getElementById('statDiagnostic').innerHTML = d.periods.length ? `
+    <table class="data-table"><thead><tr><th>Period</th><th>Assessed</th><th>ERI</th><th>BHI</th><th>SRI</th><th>AII</th><th>RAG</th></tr></thead>
+    <tbody>${d.periods.map(x => `<tr><td>${x.period}</td><td>${x.n}</td><td>${pctTxt(x.eri)}</td><td>${pctTxt(x.bhi)}</td><td>${pctTxt(x.sri)}</td><td>${pctTxt(x.aii)}</td><td><span class="chip ${ragFor(x.aii).cls}">${ragFor(x.aii).label}</span></td></tr>`).join('')}</tbody></table>
+    <div class="section-hint" style="margin-top:6px;">Cohort averages. Internal check participants are not counted.</div>` : 'No diagnostic scores on record for this cohort yet.';
+
+  document.getElementById('statGrowth').innerHTML = d.rows.length ? `
+    Cohort growth vs baseline: <b>${d.growth!==null ? (d.growth>=0?'+':'')+d.growth.toFixed(1)+' pp' : '—'}</b><br>
+    Risk flags: ${Object.entries(d.flagCounts).map(([f,n]) => `<span class="chip ${flagCls[f]}">${f}: ${n}</span>`).join(' ')}
+    <table class="data-table" style="margin-top:8px;"><thead><tr><th>Beneficiary</th><th>Latest</th><th>AII</th><th>Growth</th><th>Flag</th></tr></thead>
+    <tbody>${d.rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.latestP||'—'}</td><td>${pctTxt(r.aii)}</td><td>${r.growth!==null ? (r.growth>=0?'+':'')+r.growth.toFixed(1)+' pp' : '—'}</td><td><span class="chip ${flagCls[r.flag]}">${r.flag}</span></td></tr>`).join('')}</tbody></table>` : 'No participants in this cohort yet.';
+
+  document.getElementById('statPeii').innerHTML = d.peiiByQ.length ? `
+    <table class="data-table"><thead><tr><th>Quarter</th><th>Responses</th><th>Average PEII</th><th>Rating</th></tr></thead>
+    <tbody>${d.peiiByQ.map(x => `<tr><td>${x.quarter}</td><td>${x.n}</td><td>${pctTxt(x.pct)}</td><td><span class="chip ${PEII_RATING_CLS[ratingForPEII(x.pct)]}">${ratingForPEII(x.pct)}</span></td></tr>`).join('')}</tbody></table>` : 'No PEII entries on record for this cohort yet.';
+}
+
+function buildCohortReportBodyHtml(name, assessor, d){
+  const logoSrc = document.querySelector('.emblem img').src;
+  const dateTxt = formatReportDate(document.getElementById('reportDateInput').value) || new Date().toLocaleDateString();
+  const tbl = (head, rowsHtml) => `<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
+  const diag = d.periods.length ? tbl(['Period','Assessed','ERI','BHI','SRI','AII','RAG'],
+    d.periods.map(x => `<tr><td>${x.period}</td><td>${x.n}</td><td>${pctTxt(x.eri)}</td><td>${pctTxt(x.bhi)}</td><td>${pctTxt(x.sri)}</td><td>${pctTxt(x.aii)}</td><td>${ragFor(x.aii).label}</td></tr>`).join('')) : '<p class="np">No diagnostic scores on record.</p>';
+  const people = d.rows.length ? tbl(['Beneficiary','Latest period','AII','Growth','Risk flag'],
+    d.rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.latestP||'—'}</td><td>${pctTxt(r.aii)}</td><td>${r.growth!==null ? (r.growth>=0?'+':'')+r.growth.toFixed(1)+' pp' : '—'}</td><td>${r.flag}</td></tr>`).join('')) : '';
+  const peii = d.peiiByQ.length ? tbl(['Quarter','Responses','Average PEII','Rating'],
+    d.peiiByQ.map(x => `<tr><td>${x.quarter}</td><td>${x.n}</td><td>${pctTxt(x.pct)}</td><td>${ratingForPEII(x.pct)}</td></tr>`).join('')) : '<p class="np">No PEII entries on record.</p>';
+  const flags = Object.entries(d.flagCounts).map(([f,n]) => `${f}: ${n}`).join(' · ') || '—';
+  return `
+    <header><img src="${logoSrc}" alt="logo"><div><h1>Client / Cohort Impact Report${currentReportNumber?' — Report #'+currentReportNumber:''}</h1><div class="meta">${escapeHtml(d.programme)} — ${escapeHtml(d.cohort)}${d.sponsor ? ' · Client: '+escapeHtml(d.sponsor) : ''} · Prepared by ${escapeHtml(assessor)||'—'} · Report date: ${dateTxt}</div></div></header>
+
+    <h2>1. Cohort Overview</h2>
+    <div class="stat">Participants: <b>${d.memberCount}</b> · Assessed (latest period ${d.latest ? d.latest.period : '—'}): <b>${d.latest ? d.latest.n : 0}</b> · Cohort AII: <b>${d.latest ? pctTxt(d.latest.aii) : '—'}</b> (${ragFor(d.latest ? d.latest.aii : null).label})${d.base ? ' · Baseline AII: <b>'+pctTxt(d.base.aii)+'</b>' : ''}
+    ${d.demoCount ? `<br>Gender: ${tallyTxt(d.gender)}<br>Business stage: ${tallyTxt(d.stage)}<br>Industry: ${tallyTxt(d.industry)}` : ''}</div>
+    ${paragraphs(document.getElementById('narrOverview').value)}
+
+    <h2>2. Cohort Diagnostic Findings</h2>
+    <div class="stat">${diag}</div>
+    ${paragraphs(document.getElementById('narrDiagnostic').value)}
+
+    <h2>3. Growth, Risk &amp; Recommended Action</h2>
+    <div class="stat">Cohort growth vs baseline: <b>${d.growth!==null ? (d.growth>=0?'+':'')+d.growth.toFixed(1)+' pp' : '—'}</b> · Risk flags: ${flags}</div>
+    ${people}
+    ${paragraphs(document.getElementById('narrGrowth').value)}
+
+    <h2>4. Programme Experience (PEII)</h2>
+    <div class="stat">${peii}</div>
+    ${paragraphs(document.getElementById('narrPeii').value)}
+
+    <h2>5. Overall Conclusion &amp; Recommendations</h2>
+    ${paragraphs(document.getElementById('narrOverall').value)}
+
+    <footer>Generated by CIMP — Measurement &amp; Assessment Tool.</footer>
+  `;
+}
+
+// ---------- Cohort report history (stored in cohort_reports) ----------
+function rowToCohortReport(data){
+  return {
+    id: data.id, programme: data.programme, cohort: data.cohort, assessor: data.assessor || '',
+    reportNumber: data.report_number, reportDate: data.report_date,
+    sections: { overview: data.overview || '', diagnostic: data.diagnostic || '', growth: data.growth || '', peii: data.peii || '', overall: data.overall || '' },
+    savedAt: data.saved_at,
+  };
+}
+async function loadCohortHistory(key){
+  const { programme, cohort } = splitCohortKey(key);
+  try{
+    const { data, error } = await db.from('cohort_reports').select('*').eq('programme', programme).eq('cohort', cohort).order('report_number', { ascending: false });
+    if(error) throw error;
+    return (data || []).map(rowToCohortReport);
+  }catch(e){ console.error('Failed to load cohort report history', e); return []; }
+}
+async function loadCohortReportById(id){
+  try{
+    const { data, error } = await db.from('cohort_reports').select('*').eq('id', id).maybeSingle();
+    if(error) throw error;
+    return data ? rowToCohortReport(data) : null;
+  }catch(e){ console.error(e); return null; }
+}
+async function saveCohortReport(){
+  const key = document.getElementById('reportCohortSelect').value;
+  if(!key){ showToast('Select a client / cohort first'); return; }
+  const { programme, cohort } = splitCohortKey(key);
+  const reportDate = document.getElementById('reportDateInput').value || todayISODate();
+  const fields = {
+    assessor: document.getElementById('reportAssessorInput').value.trim(),
+    overview: document.getElementById('narrOverview').value, diagnostic: document.getElementById('narrDiagnostic').value,
+    growth: document.getElementById('narrGrowth').value, peii: document.getElementById('narrPeii').value, overall: document.getElementById('narrOverall').value,
+    report_date: reportDate, saved_at: new Date().toISOString(),
+  };
+  try{
+    if(currentReportId){
+      const { error } = await db.from('cohort_reports').update(fields).eq('id', currentReportId);
+      if(error) throw error;
+      showToast(`Updated report #${currentReportNumber} — ${programme} ${cohort}`);
+    } else {
+      const history = await loadCohortHistory(key);
+      const nextNumber = history.length ? Math.max(...history.map(r => r.reportNumber)) + 1 : 1;
+      const { data, error } = await db.from('cohort_reports').insert({ programme, cohort, report_number: nextNumber, ...fields }).select('id').single();
+      if(error) throw error;
+      currentReportId = data.id; currentReportNumber = nextNumber;
+      showToast(`Saved new report #${nextNumber} — ${programme} ${cohort}`);
+    }
+    document.getElementById('reportSavedNote').textContent = `Last saved ${new Date(fields.saved_at).toLocaleString()}`;
+    populateReportSelect(await loadCohortHistory(key), currentReportId);
+  }catch(e){ console.error(e); showToast('Could not save — please try again'); }
+}
+
 
 function rowToReport(data){
   return {
@@ -4229,6 +4468,17 @@ function populateReportForm(rec){
 }
 
 async function switchReportContext(){
+  applyReportTypeUI();
+  if(currentReportType === 'cohort'){
+    await populateCohortSelect();
+    const key = document.getElementById('reportCohortSelect').value;
+    if(!key){ ['statOverview','statDiagnostic','statGrowth','statPeii'].forEach(id => document.getElementById(id).innerHTML = 'No cohorts yet.'); populateReportSelect([]); populateReportForm(null); return; }
+    renderCohortStats(await gatherCohortData(key));
+    const hist = await loadCohortHistory(key);
+    populateReportSelect(hist);
+    populateReportForm(hist.length ? hist[0] : null);
+    return;
+  }
   const list = await loadBeneficiaryList();
   populateSelect('reportBeneficiarySelect', list);
   const name = document.getElementById('reportBeneficiarySelect').value;
@@ -4250,7 +4500,7 @@ async function switchSelectedReport(){
     populateReportForm(null);
     return;
   }
-  const rec = await loadNarrativeById(val);
+  const rec = currentReportType === 'cohort' ? await loadCohortReportById(val) : await loadNarrativeById(val);
   populateReportForm(rec);
 }
 
@@ -4258,6 +4508,14 @@ async function switchSelectedReport(){
 // beneficiary, so the next save creates a new dated row instead of
 // overwriting whichever report was last open.
 async function startNewReport(){
+  if(currentReportType === 'cohort'){
+    const key = document.getElementById('reportCohortSelect').value;
+    if(!key){ showToast('Select a client / cohort first'); return; }
+    populateReportSelect(await loadCohortHistory(key), '__new__');
+    populateReportForm(null);
+    showToast('Starting a new report — fill it in and click Save report');
+    return;
+  }
   const name = document.getElementById('reportBeneficiarySelect').value;
   if(!name){ showToast('Select a beneficiary first'); return; }
   const history = await loadNarrativeHistory(name);
@@ -4267,6 +4525,7 @@ async function startNewReport(){
 }
 
 async function saveNarrativeReport(){
+  if(currentReportType === 'cohort') return saveCohortReport();
   const name = document.getElementById('reportBeneficiarySelect').value;
   if(!name){ showToast('Select a beneficiary first'); return; }
   const reportDate = document.getElementById('reportDateInput').value || todayISODate();
@@ -4354,6 +4613,13 @@ function paragraphs(text){
 // or null (with a toast) if there's no beneficiary selected yet. Shared by
 // the print, PDF and Word export actions so they never drift apart.
 async function prepareReportExport(){
+  if(currentReportType === 'cohort'){
+    const key = document.getElementById('reportCohortSelect').value;
+    if(!key){ showToast('Select a client / cohort first'); return null; }
+    const assessor = document.getElementById('reportAssessorInput').value.trim();
+    const data = await gatherCohortData(key);
+    return { name: `${data.programme} ${data.cohort}`, assessor, data };
+  }
   const name = document.getElementById('reportBeneficiarySelect').value;
   if(!name){ showToast('Select a beneficiary first'); return null; }
   const assessor = document.getElementById('reportAssessorInput').value.trim();
@@ -4471,6 +4737,7 @@ function buildExecutiveSummaryHtml(data){
 }
 
 function buildReportBodyHtml(name, assessor, data){
+  if(data && data.isCohort) return buildCohortReportBodyHtml(name, assessor, data);
   const logoSrc = document.querySelector('.emblem img').src;
   const today = new Date().toLocaleDateString();
 
@@ -4518,7 +4785,7 @@ function buildReportBodyHtml(name, assessor, data){
 function reportExportFilename(name, ext){
   const safe = (name || 'beneficiary').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '');
   const period = currentReportNumber ? `_report${currentReportNumber}` : '';
-  return `${safe}${period}_impact_report.${ext}`;
+  return `${safe}${period}_${currentReportType === 'cohort' ? 'cohort' : 'impact'}_report.${ext}`;
 }
 
 async function generatePrintableReport(){
@@ -4709,6 +4976,8 @@ function bindStaticEventListeners(){
 
   document.getElementById('reportBeneficiarySelect').addEventListener('change', switchReportContext);
   document.getElementById('reportSelect').addEventListener('change', switchSelectedReport);
+  document.getElementById('reportTypeSelect').addEventListener('change', (e) => { currentReportType = e.target.value; switchReportContext(); });
+  document.getElementById('reportCohortSelect').addEventListener('change', switchReportContext);
   document.getElementById('reportNewBtn').addEventListener('click', startNewReport);
   document.getElementById('reportSaveBtn').addEventListener('click', saveNarrativeReport);
   document.getElementById('reportPrintBtn').addEventListener('click', generatePrintableReport);
