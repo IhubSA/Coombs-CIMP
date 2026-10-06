@@ -961,7 +961,7 @@
 
     <div class="card" style="margin-top:16px;">
       <div class="section-title">Programme settings</div>
-      <p class="section-hint">Set the host organisation for each programme. It replaces "Coombs Consulting" in the consent question on the Demographic Intake for everyone on that programme. Leave blank to use Coombs Consulting.</p>
+      <p class="section-hint">Set the host organisation for each programme. It replaces "Coombs Consulting" in the consent question on the Demographic Intake for everyone on that programme. Leave blank to use Angels Resource Centres.</p>
       <div id="programmeSettingsArea"><div class="empty-note">No programmes yet.</div></div>
     </div>
 
@@ -2539,7 +2539,7 @@ async function renderProgrammeSettings(){
     <div class="invite-row">
       <div class="invite-meta"><b>${escapeHtml(pn)}</b></div>
       <div class="invite-row-actions">
-        <input type="text" data-prog="${escapeHtml(pn)}" value="${escapeHtml(programmeHostOrg[pn] || '')}" placeholder="Coombs Consulting (default)" style="min-width:220px;" />
+        <input type="text" data-prog="${escapeHtml(pn)}" value="${escapeHtml(programmeHostOrg[pn] || '')}" placeholder="Angels Resource Centres (default)" style="min-width:220px;" />
         <button class="btn btn-primary btn-sm" type="button" data-prog-save="${escapeHtml(pn)}">Save</button>
       </div>
     </div>`).join('');
@@ -3077,7 +3077,7 @@ const ENTERPRISE_SURVEY_LIBRARY = {
 };
 let checkNames = new Set();      // internal "check" participants — excluded from all statistics
 let programmeHostOrg = {};       // { programme: host organisation name }
-let currentHostOrg = 'Coombs Consulting';
+let currentHostOrg = 'Angels Resource Centres';
 const DOC_BUCKET = 'beneficiary-documents';
 
 function nameSlug(n){ return String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
@@ -3096,7 +3096,7 @@ async function loadProgrammeSettings(){
 // Which organisation hosts the programme this beneficiary is on (used in the
 // consent wording). Falls back to Coombs Consulting if none has been set.
 async function resolveHostOrg(beneficiary){
-  currentHostOrg = 'Coombs Consulting';
+  currentHostOrg = 'Angels Resource Centres';
   try{
     const { data: b } = await db.from('beneficiaries').select('programme').eq('name', beneficiary).maybeSingle();
     if(b && b.programme){
