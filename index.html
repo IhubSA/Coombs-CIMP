@@ -1345,6 +1345,12 @@ async function enterApp(){
 // no admin nav, no picking other beneficiaries. This finds whichever
 // step is next (Demographic Intake, then Baseline/Q1/Q2/Q3/Q4 in order)
 // and shows only that, locking the beneficiary/period pickers to it.
+async function beneficiaryBackToIntake(){
+  switchEnterpriseSubview('demo');
+  await switchEnterpriseContext();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 async function enterBeneficiaryMode(name, opts){
   opts = opts || {};
   document.querySelector('.tabnav').style.display = 'none';
@@ -1361,11 +1367,12 @@ async function enterBeneficiaryMode(name, opts){
   if(subnav) subnav.style.display = 'none';
 
   const demo = await loadDemographic(name);
-  if(!demo){
+  if(!demo || !isDemoComplete(demo.data)){
     switchEnterpriseSubview('demo');
     await switchEnterpriseContext();
+    const oldW = document.getElementById('benWelcome'); if(oldW) oldW.remove();
     document.getElementById('entSubDemo').insertAdjacentHTML('afterbegin',
-      `<div class="section-hint" style="margin-bottom:10px;"><b>Welcome, ${escapeHtml(name)}!</b> Please complete this short intake form to get started.</div>`);
+      `<div class="section-hint" id="benWelcome" style="margin-bottom:10px;"><b>Welcome, ${escapeHtml(name)}!</b> Please complete this short intake form to get started.</div>`);
     return;
   }
 
@@ -1404,6 +1411,7 @@ async function enterBeneficiaryMode(name, opts){
     `<div id="benNotice" style="margin-bottom:14px;">
       <h2 style="font-size:26px; font-weight:800; margin:0 0 10px;">Complete the Assessment</h2>
       ${msg ? `<div class="section-hint" style="border-left:4px solid var(--gold); padding:12px 14px; font-size:14px;">${msg}</div>` : ''}
+      <button type="button" class="btn btn-sm" style="margin-top:10px;" onclick="beneficiaryBackToIntake()">← Review or edit my intake form</button>
     </div>`);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -3076,6 +3084,15 @@ const ENTERPRISE_SURVEY_LIBRARY = {
     ],
   },
 };
+// Fields a beneficiary must fill in before the intake can be saved.
+const DEMO_REQUIRED = ['full_name','id_number','phone','consent_marketing','consent_travel','consent_popia','declaration'];
+function demoAnswered(v){ return Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''); }
+// An intake counts as done once it holds a reasonable number of answers
+// (guards against an empty form having been saved).
+function isDemoComplete(d){
+  d = d || {};
+  return Object.values(d).filter(demoAnswered).length >= 5;
+}
 let checkNames = new Set();      // internal "check" participants — excluded from all statistics
 let programmeHostOrg = {};       // { programme: host organisation name }
 let currentHostOrg = 'Angels Resource Centres';
@@ -3322,6 +3339,24 @@ async function loadDemographic(beneficiary){
 async function saveDemographic(){
   const beneficiary = document.getElementById('entBeneficiarySelect').value;
   if(!beneficiary){ showToast('Select a beneficiary first'); return; }
+  if(currentUserRole && currentUserRole.role === 'beneficiary'){
+    const missing = DEMO_REQUIRED.filter(id => !demoAnswered(demographicAnswers[id]));
+    document.querySelectorAll('#demographicFormArea .demo-field').forEach(el => el.style.outline = '');
+    if(missing.length){
+      const labels = [];
+      missing.forEach(id => {
+        const ctl = document.querySelector(`#demographicFormArea [data-demo-field="${id}"]`);
+        const box = ctl && ctl.closest('.demo-field');
+        if(box){ box.style.outline = '2px solid var(--red, #c0392b)'; box.style.outlineOffset = '4px'; box.style.borderRadius = '6px'; }
+        const f = DEMOGRAPHIC_FIELDS.flatMap(sec => sec.fields).find(x => x.id === id);
+        if(f) labels.push(f.label.replace('{host_org}', currentHostOrg).slice(0, 60));
+      });
+      const first = document.querySelector(`#demographicFormArea [data-demo-field="${missing[0]}"]`);
+      if(first) first.closest('.demo-field').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast(`Please complete the highlighted questions (${missing.length} missing)`);
+      return;
+    }
+  }
   try{
     const row = { beneficiary, data: demographicAnswers, saved_at: new Date().toISOString() };
     const { error } = await db.from('enterprise_demographics').upsert(row, { onConflict: 'beneficiary' });

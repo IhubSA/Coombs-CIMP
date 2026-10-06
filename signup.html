@@ -56,8 +56,14 @@
 
     <div id="loadingState">Checking your invite link…</div>
 
+    <div id="usedState" style="display:none; text-align:center;">
+      <p class="sub" style="margin-bottom:10px;"><b id="usedName"></b>, your account is already set up. &#10003;</p>
+      <p class="sub">Log in with your phone number and the password you chose. If you've forgotten it, tap <b>Forgot password?</b> on the login page.</p>
+      <a href="/" id="goLogin" style="display:block; margin-top:14px; padding:11px; border-radius:8px; background:var(--ink); color:#fff; font-weight:600; font-size:14px; text-decoration:none;">Go to login</a>
+    </div>
+
     <div id="invalidState" style="display:none;">
-      This invite link is invalid or has already been used. Please contact your programme coordinator for a new link.
+      This invite link is not valid. Please contact your programme coordinator for a new link.
     </div>
 
     <div id="signupForm" style="display:none;">
@@ -104,6 +110,14 @@ async function init(){
     const { data, error } = await sbClient.rpc('get_invite_by_token', { p_token: token });
     if(error) throw error;
     const invite = Array.isArray(data) ? data[0] : data;
+    if(invite && invite.status === 'used'){
+      // The link stays valid until the password is set. Once it has been,
+      // anyone tapping it again is simply sent on to the login page.
+      document.getElementById('usedName').textContent = invite.name;
+      hide('loadingState');
+      show('usedState');
+      return;
+    }
     if(!invite || invite.status !== 'pending'){
       hide('loadingState');
       show('invalidState');
