@@ -3110,7 +3110,20 @@ const ENTERPRISE_SURVEY_LIBRARY = {
   },
 };
 // Fields a beneficiary must fill in before the intake can be saved.
-const DEMO_REQUIRED = ['full_name','id_number','phone','consent_marketing','consent_travel','consent_popia','declaration'];
+// Every intake question must be answered except these (genuinely optional ones).
+const DEMO_OPTIONAL = new Set(['whatsapp','email','compliance','challenges','compliance_docs_ref']);
+function demoMissingIds(){
+  const out = [];
+  DEMOGRAPHIC_FIELDS.forEach(sec => sec.fields.forEach(f => {
+    if(DEMO_OPTIONAL.has(f.id)) return;
+    // Experience details only apply to people who said they have prior experience.
+    if((f.id === 'experience_years' || f.id === 'experience_type') && demographicAnswers.prior_experience !== 'Yes') return;
+    if(!demoAnswered(demographicAnswers[f.id])) out.push(f.id);
+  }));
+  // Compliance documents are needed once any compliance item has been ticked.
+  if(demoAnswered(demographicAnswers.compliance) && !demoAnswered(demographicAnswers.compliance_docs_ref)) out.push('compliance_docs_ref');
+  return out;
+}
 function demoAnswered(v){ return Array.isArray(v) ? v.length > 0 : (v !== undefined && v !== null && String(v).trim() !== ''); }
 // An intake counts as done once it holds a reasonable number of answers
 // (guards against an empty form having been saved).
@@ -3280,6 +3293,7 @@ const DEMOGRAPHIC_FIELDS = [
 
 let demographicAnswers = {};
 let enterpriseSurveyScores = {};
+let enterpriseMissing = new Set(); // statements still to be scored (highlighted red after a failed save)
 
 function fieldControlHtml(field, value){
   const v = value === undefined || value === null ? '' : value;
@@ -3319,7 +3333,7 @@ function buildDemographicForm(){
       <div class="demo-section-title">${section.section}</div>
       <div class="demo-grid">
         ${section.fields.map(f => `
-          <div class="demo-field ${f.type==='textarea'||f.type==='checkboxes'||f.type==='upload'?'field-wide':''}">
+          <div class="demo-field ${f.type==='textarea'||f.type==='checkboxes'||f.type==='upload'?'field-wide':''}" data-field-box="${f.id}">
             <label>${demoLabel(f)}</label>
             ${fieldControlHtml(f, demographicAnswers[f.id])}
           </div>
@@ -3365,20 +3379,19 @@ async function saveDemographic(){
   const beneficiary = document.getElementById('entBeneficiarySelect').value;
   if(!beneficiary){ showToast('Select a beneficiary first'); return; }
   if(currentUserRole && currentUserRole.role === 'beneficiary'){
-    const missing = DEMO_REQUIRED.filter(id => !demoAnswered(demographicAnswers[id]));
+    const missing = demoMissingIds();
     document.querySelectorAll('#demographicFormArea .demo-field').forEach(el => el.style.outline = '');
     if(missing.length){
       const labels = [];
       missing.forEach(id => {
-        const ctl = document.querySelector(`#demographicFormArea [data-demo-field="${id}"]`);
-        const box = ctl && ctl.closest('.demo-field');
+        const box = document.querySelector(`#demographicFormArea [data-field-box="${id}"]`);
         if(box){ box.style.outline = '2px solid var(--red, #c0392b)'; box.style.outlineOffset = '4px'; box.style.borderRadius = '6px'; }
         const f = DEMOGRAPHIC_FIELDS.flatMap(sec => sec.fields).find(x => x.id === id);
         if(f) labels.push(f.label.replace('{host_org}', currentHostOrg).slice(0, 60));
       });
-      const first = document.querySelector(`#demographicFormArea [data-demo-field="${missing[0]}"]`);
-      if(first) first.closest('.demo-field').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      showToast(`Please complete the highlighted questions (${missing.length} missing)`);
+      const first = document.querySelector(`#demographicFormArea [data-field-box="${missing[0]}"]`);
+      if(first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast(`Please answer every question — ${missing.length} still to do (outlined in red)`);
       return;
     }
   }
@@ -3413,7 +3426,7 @@ function buildEnterpriseSurveyArea(period){
         <div class="index-body show">
           <div class="domain-group">
             ${items.map(([code, text]) => `
-              <div class="q-row">
+              <div class="q-row" ${enterpriseMissing.has(code) ? 'style="outline:2px solid var(--red, #c0392b); outline-offset:3px; border-radius:6px;"' : ''}>
                 <div><div class="q-text">${text}</div><span class="q-code">${code}</span></div>
                 <div class="scale" data-code="${code}">
                   ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}" class="${enterpriseSurveyScores[code]===v?'sel':''}">${v}</button>`).join('')}
@@ -3431,6 +3444,7 @@ function buildEnterpriseSurveyArea(period){
       const code = btn.parentElement.getAttribute('data-code');
       const val = parseInt(btn.getAttribute('data-val'), 10);
       enterpriseSurveyScores[code] = (enterpriseSurveyScores[code] === val) ? undefined : val;
+      enterpriseMissing.delete(code);
       buildEnterpriseSurveyArea(period);
     });
   });
@@ -3449,6 +3463,24 @@ async function saveEnterpriseSurvey(){
   const beneficiary = document.getElementById('entBeneficiarySelect').value;
   const period = document.getElementById('entPeriodSelect').value;
   if(!beneficiary){ showToast('Select a beneficiary first'); return; }
+  if(currentUserRole && currentUserRole.role === 'beneficiary'){
+    const lib = ENTERPRISE_SURVEY_LIBRARY[period] || {};
+    const allCodes = ['ERI','BHI','SRI'].flatMap(idx => (lib[idx] || []).map(([code]) => code));
+    const missing = allCodes.filter(c => !enterpriseSurveyScores[c]);
+    enterpriseMissing = new Set(missing);
+    document.querySelectorAll('#enterpriseSurveyArea .q-row').forEach(r => r.style.outline = '');
+    if(missing.length){
+      missing.forEach(c => {
+        const row = document.querySelector(`#enterpriseSurveyArea .scale[data-code="${c}"]`);
+        const box = row && row.closest('.q-row');
+        if(box){ box.style.outline = '2px solid var(--red, #c0392b)'; box.style.outlineOffset = '3px'; box.style.borderRadius = '6px'; }
+      });
+      const firstRow = document.querySelector(`#enterpriseSurveyArea .scale[data-code="${missing[0]}"]`);
+      if(firstRow) firstRow.closest('.q-row').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast(`Please score every statement — ${missing.length} still to do (outlined in red)`);
+      return;
+    }
+  }
   try{
     const row = { beneficiary, period, scores: enterpriseSurveyScores, saved_at: new Date().toISOString() };
     const { error } = await db.from('enterprise_survey_responses').upsert(row, { onConflict: 'beneficiary,period' });
