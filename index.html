@@ -971,8 +971,14 @@
 
     <div class="card" style="margin-top:16px;">
       <div class="section-title">Programme settings</div>
-      <p class="section-hint">Set the host organisation for each programme. It sets the organisation named in the consent question on the Demographic Intake for everyone on that programme. Leave blank to use Angels Resource Centres.</p>
+      <p class="section-hint">The organisation named in the consent question on the Demographic Intake for everyone on that programme. Leave blank to use Angels Resource Centres.</p>
       <div id="programmeSettingsArea"><div class="empty-note">No programmes yet.</div></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title">Survey dates by cohort</div>
+      <p class="section-hint">Set a fixed date on which each survey opens for everyone in a cohort, so the whole cohort starts together. Beneficiaries must still have completed the previous survey. Leave a date blank for the normal timing: Q1 opens 14 days after the Baseline is completed, and Q2, Q3 and Q4 open 90 days after the previous survey. Reminder texts go out on the open date.</p>
+      <div id="cohortSettingsArea"><div class="empty-note">No cohorts yet.</div></div>
     </div>
 
     <div class="card" style="margin-top:16px;">
@@ -1397,9 +1403,21 @@ async function enterBeneficiaryMode(name, opts){
     prevSavedAt = data.saved_at;
   }
 
+  // A fixed open date set for the beneficiary's cohort (Survey dates by cohort)
+  // overrides the "days after the previous survey" rule.
+  let fixedDates = {};
+  try{
+    const { data: b } = await db.from('beneficiaries').select('programme,cohort').eq('name', name).maybeSingle();
+    if(b && b.programme && b.cohort){
+      const { data: cs } = await db.from('cohort_settings').select('q1_open_date,q2_open_date,q3_open_date,q4_open_date').eq('programme', b.programme).eq('cohort', b.cohort).maybeSingle();
+      if(cs) fixedDates = cs;
+    }
+  }catch(e){ console.error('Failed to load cohort survey dates', e); }
+
   let waitingUntil = null;
   if(nextPeriod && nextPeriod !== 'Baseline' && prevSavedAt){
-    const opens = new Date(new Date(prevSavedAt).getTime() + WAIT_DAYS[nextPeriod] * 86400000);
+    const fixed = fixedDates[nextPeriod.toLowerCase() + '_open_date'];
+    const opens = fixed ? new Date(fixed + 'T00:00:00') : new Date(new Date(prevSavedAt).getTime() + WAIT_DAYS[nextPeriod] * 86400000);
     if(Date.now() < opens.getTime()) waitingUntil = opens;
   }
 
@@ -2328,7 +2346,7 @@ function switchTab(tab){
   if(tab === 'peii'){ switchPeiiContext(); renderPeiiSummary(); }
   if(tab === 'report'){ switchReportContext(); }
   if(tab === 'sponsors'){ renderSponsorPortal(); }
-  if(tab === 'invites'){ renderInviteList(); renderProgrammeSettings(); }
+  if(tab === 'invites'){ renderInviteList(); renderProgrammeSettings(); renderCohortSettings(); }
   if(tab === 'enterprise'){ switchEnterpriseContext(); }
   if(tab === 'interns'){ renderInternVisitHistory(); }
 }
@@ -2518,6 +2536,7 @@ async function createInvite(){
     showToast(`Invite created for ${name}`);
     renderInviteList();
     renderProgrammeSettings();
+    renderCohortSettings();
   }catch(e){ console.error(e); showToast('Could not create invite — please try again'); }
 }
 
@@ -2583,6 +2602,46 @@ async function renderProgrammeSettings(){
     const { error } = await db.from('programme_settings').upsert({ programme: pn, host_org: val || null, updated_at: new Date().toISOString() }, { onConflict: 'programme' });
     if(error){ console.error(error); showToast('Could not save — please try again'); return; }
     showToast(`Saved host organisation for ${pn}`);
+  }));
+}
+
+// Fixed survey open dates, one row per programme + cohort.
+async function renderCohortSettings(){
+  const area = document.getElementById('cohortSettingsArea');
+  if(!area) return;
+  const rows = {};
+  const key = (p,c) => `${p}::${c}`;
+  try{
+    const [a, b, c] = await Promise.all([
+      db.from('beneficiaries').select('programme,cohort'),
+      db.from('beneficiary_invites').select('programme,cohort'),
+      db.from('cohort_settings').select('*'),
+    ]);
+    [...(a.data||[]), ...(b.data||[])].forEach(r => { if(r.programme && r.cohort) rows[key(r.programme, r.cohort)] = { programme: r.programme, cohort: r.cohort }; });
+    (c.data||[]).forEach(r => { rows[key(r.programme, r.cohort)] = r; });
+  }catch(e){ console.error(e); }
+  const list = Object.values(rows).sort((x,y) => (x.programme+x.cohort).localeCompare(y.programme+y.cohort));
+  if(!list.length){ area.innerHTML = '<div class="empty-note">No cohorts yet.</div>'; return; }
+  area.innerHTML = list.map((r,i) => {
+    const dateIn = q => `<label style="font-size:12px; display:flex; flex-direction:column; gap:2px;">${q} opens<input type="date" data-cs="${i}" data-field="${q.toLowerCase()}_open_date" value="${escapeHtml(r[q.toLowerCase()+'_open_date'] || '')}" /></label>`;
+    return `
+    <div class="invite-row" style="flex-direction:column; align-items:stretch; gap:10px;">
+      <div class="invite-meta"><b>${escapeHtml(r.programme)}</b> / ${escapeHtml(r.cohort)}</div>
+      <div class="invite-row-actions" style="flex-wrap:wrap; align-items:flex-end;">
+        ${dateIn('Q1')}${dateIn('Q2')}${dateIn('Q3')}${dateIn('Q4')}
+        <button class="btn btn-primary btn-sm" type="button" data-cs-save="${i}">Save</button>
+      </div>
+    </div>`;
+  }).join('');
+  area.querySelectorAll('[data-cs-save]').forEach(btn => btn.addEventListener('click', async () => {
+    const i = btn.getAttribute('data-cs-save');
+    const r = list[i];
+    const get = f => (area.querySelector(`[data-cs="${i}"][data-field="${f}"]`) || {}).value || null;
+    const row = { programme: r.programme, cohort: r.cohort, updated_at: new Date().toISOString() };
+    ['q1','q2','q3','q4'].forEach(q => { row[q+'_open_date'] = get(q+'_open_date'); });
+    const { error } = await db.from('cohort_settings').upsert(row, { onConflict: 'programme,cohort' });
+    if(error){ console.error(error); showToast('Could not save — please try again'); return; }
+    showToast(`Saved survey dates for ${r.programme} / ${r.cohort}`);
   }));
 }
 
@@ -3132,6 +3191,7 @@ function isDemoComplete(d){
   return Object.values(d).filter(demoAnswered).length >= 5;
 }
 let checkNames = new Set();      // internal "check" participants — excluded from all statistics
+let programmeSettingsRows = {};  // full programme_settings rows by programme (host org + survey open dates)
 let programmeHostOrg = {};       // { programme: host organisation name }
 let currentHostOrg = 'Angels Resource Centres';
 const DOC_BUCKET = 'beneficiary-documents';
@@ -3142,9 +3202,10 @@ function benLabel(n){ return checkNames.has(n) ? n + ' (check)' : n; }
 async function loadProgrammeSettings(){
   programmeHostOrg = {};
   try{
-    const { data, error } = await db.from('programme_settings').select('programme,host_org');
+    const { data, error } = await db.from('programme_settings').select('*');
     if(error) throw error;
-    (data||[]).forEach(r => { if(r.host_org) programmeHostOrg[r.programme] = r.host_org; });
+    programmeSettingsRows = {};
+    (data||[]).forEach(r => { programmeSettingsRows[r.programme] = r; if(r.host_org) programmeHostOrg[r.programme] = r.host_org; });
   }catch(e){ console.error('Failed to load programme settings', e); }
   return programmeHostOrg;
 }
