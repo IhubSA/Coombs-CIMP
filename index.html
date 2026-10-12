@@ -5,38 +5,38 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CIMP — Measurement &amp; Assessment Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,500;1,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
-    --pine:#1A1A1A;
-    --pine-deep:#000000;
-    --sage:#F7F5F0;
-    --sage-line:#E3DDCF;
+    --pine:#074159;
+    --pine-deep:#05303F;
+    --sage:#F1F6F8;
+    --sage-line:#D5E3E9;
     --paper:#FFFFFF;
-    --gold:#A8823C;
-    --gold-soft:#EFE3C8;
-    --ink:#1A1A1A;
-    --ink-soft:#6B6558;
-    --green:#3C7A5B;
-    --green-bg:#E4EEE7;
-    --yellow:#B5860B;
-    --yellow-bg:#F6EDD3;
+    --gold:#0A6494;
+    --gold-soft:#DCEDF7;
+    --ink:#0A2E3D;
+    --ink-soft:#51707E;
+    --green:#2E7D32;
+    --green-bg:#E3F0E0;
+    --yellow:#8A6508;
+    --yellow-bg:#FBEFD0;
     --orange:#B5651D;
-    --orange-bg:#F3E3D3;
-    --red:#A23B34;
-    --red-bg:#F2E0DD;
-    --grey:#8C8778;
-    --grey-bg:#EDEAE2;
+    --orange-bg:#F6E6D6;
+    --red:#9A3B33;
+    --red-bg:#F6DFDC;
+    --grey:#6C8694;
+    --grey-bg:#EAF0F3;
     --radius:10px;
     --shadow: 0 1px 2px rgba(0,0,0,0.05), 0 6px 18px rgba(0,0,0,0.06);
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
-    font-family:'Inter',sans-serif;
+    font-family:'IBM Plex Sans',sans-serif;
     background:var(--sage);
     color:var(--ink);
     -webkit-font-smoothing:antialiased;
@@ -45,11 +45,11 @@
 
   /* ---------- Header ---------- */
   .masthead{
-    background:var(--paper);
-    border-top:3px solid var(--ink);
-    border-bottom:1px solid var(--ink);
+    background:linear-gradient(100deg, var(--pine) 0%, #0A5676 100%);
+    border:0;
+    border-radius:12px;
     padding:22px 30px;
-    color:var(--ink);
+    color:#fff;
     display:flex;
     align-items:center;
     gap:24px;
@@ -61,20 +61,21 @@
     display:flex; align-items:center; justify-content:center;
   }
   .emblem img{
-    height:76px; width:auto; display:block;
+    height:72px; width:72px; object-fit:contain; display:block;
+    background:#fff; border-radius:10px; padding:4px;
   }
-  .masthead-text{border-left:1px solid var(--sage-line); padding-left:24px;}
+  .masthead-text{border-left:1px solid rgba(255,255,255,.28); padding-left:24px;}
   .masthead-subtitle{
-    font-family:'Inter',sans-serif; font-weight:600; font-size:12px; text-transform:uppercase;
-    letter-spacing:0.08em; color:var(--gold); margin:0 0 4px;
+    font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:12px; text-transform:uppercase;
+    letter-spacing:0.08em; color:#8FD4F0; margin:0 0 4px;
   }
   .masthead h1{
-    font-family:'Playfair Display',serif; font-weight:700; font-size:25px; margin:0 0 3px;
-    letter-spacing:0.2px; color:var(--ink);
+    font-family:'Archivo',sans-serif; font-weight:700; font-size:25px; margin:0 0 3px;
+    letter-spacing:0.2px; color:#fff;
   }
-  .masthead p{margin:0 0 6px;font-size:13px;color:var(--ink-soft);max-width:560px;line-height:1.5;}
+  .masthead p{margin:0 0 6px;font-size:13px;color:#C6DCE6;max-width:560px;line-height:1.5;}
   .masthead .tagline{
-    font-family:'Playfair Display',serif; font-style:italic; font-size:12.5px; color:var(--gold);
+    font-family:'Archivo',sans-serif; font-style:italic; font-size:12.5px; color:#EFAE10;
     letter-spacing:0.03em;
   }
 
@@ -97,14 +98,14 @@
   }
   .field select, .field input{
     width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--sage-line);
-    background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px; color:var(--ink);
+    background:var(--sage); font-family:'IBM Plex Sans',sans-serif; font-size:13.5px; color:var(--ink);
   }
   .field select:focus, .field input:focus{outline:2px solid var(--gold); outline-offset:1px;}
   .new-beneficiary-row{display:none; grid-column:1 / -1; gap:10px; margin-top:2px;}
   .new-beneficiary-row.show{display:flex;}
   .new-beneficiary-row input{flex:1;}
   .btn{
-    border:none; border-radius:8px; padding:9px 16px; font-family:'Inter',sans-serif;
+    border:none; border-radius:8px; padding:9px 16px; font-family:'IBM Plex Sans',sans-serif;
     font-size:13px; font-weight:600; cursor:pointer; transition:transform .08s ease, opacity .15s ease;
     white-space:nowrap;
   }
@@ -139,8 +140,8 @@
   }
   .tag-ERI{background:#E4ECEA; color:var(--pine);}
   .tag-BHI{background:var(--gold-soft); color:#7A5613;}
-  .tag-SRI{background:#DEEBE1; color:#215C3A;}
-  .index-head h2{font-family:'Playfair Display',serif; font-size:17px; font-weight:600; margin:0;}
+  .tag-SRI{background:#E2EDF2; color:#1E5068;}
+  .index-head h2{font-family:'Archivo',sans-serif; font-size:17px; font-weight:600; margin:0;}
   .index-head .sub{font-size:12px; color:var(--ink-soft); margin-top:2px;}
   .index-head-right{display:flex; align-items:center; gap:14px;}
   .index-pct{font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:500;}
@@ -180,7 +181,7 @@
     padding:18px 20px; box-shadow:var(--shadow);
   }
   .card h3{
-    font-family:'Playfair Display',serif; font-size:14.5px; font-weight:600; margin:0 0 12px;
+    font-family:'Archivo',sans-serif; font-size:14.5px; font-weight:600; margin:0 0 12px;
     display:flex; align-items:center; justify-content:space-between;
   }
   .progress-track{height:6px; border-radius:4px; background:var(--sage-line); overflow:hidden;}
@@ -216,7 +217,7 @@
   }
   .detail-value{ font-size:13.5px; color:var(--ink); }
 
-  .aii-value{font-family:'Playfair Display',serif; font-size:38px; font-weight:600; line-height:1; margin:4px 0 2px;}
+  .aii-value{font-family:'Archivo',sans-serif; font-size:38px; font-weight:600; line-height:1; margin:4px 0 2px;}
   .aii-growth{font-size:12.5px; color:var(--ink-soft);}
   .aii-growth b{color:var(--ink);}
   .risk-line{margin-top:12px; padding-top:12px; border-top:1px solid var(--sage-line);}
@@ -244,7 +245,7 @@
     background:var(--paper); border-radius:14px; padding:22px; max-width:640px; width:100%;
     box-shadow:0 20px 60px rgba(0,0,0,0.25);
   }
-  .modal h3{font-family:'Playfair Display',serif; margin:0 0 8px;}
+  .modal h3{font-family:'Archivo',sans-serif; margin:0 0 8px;}
   .modal p{font-size:12.5px; color:var(--ink-soft); margin:0 0 12px; line-height:1.5;}
   .modal textarea{
     width:100%; height:200px; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
@@ -265,7 +266,7 @@
     border-radius:12px; padding:5px; box-shadow:var(--shadow); width:fit-content;
   }
   .tabnav button{
-    border:none; background:transparent; padding:9px 18px; border-radius:8px; font-family:'Inter',sans-serif;
+    border:none; background:transparent; padding:9px 18px; border-radius:8px; font-family:'IBM Plex Sans',sans-serif;
     font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer; transition:all .15s ease;
   }
   .tabnav button.active{background:var(--pine); color:#fff;}
@@ -279,7 +280,7 @@
     box-shadow:var(--shadow);
   }
   .kpi-label{font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-soft); font-weight:600;}
-  .kpi-value{font-family:'Playfair Display',serif; font-size:26px; font-weight:600; margin-top:6px;}
+  .kpi-value{font-family:'Archivo',sans-serif; font-size:26px; font-weight:600; margin-top:6px;}
   .kpi-sub{font-size:11.5px; color:var(--ink-soft); margin-top:4px;}
 
   .monitor-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:18px; margin-top:18px; align-items:start;}
@@ -306,7 +307,7 @@
   .jr-form .field label{font-size:10.5px;}
   .jr-form .field input, .jr-form .field select{padding:8px 9px; font-size:13px;}
 
-  .section-title{font-family:'Playfair Display',serif; font-size:16px; font-weight:600; margin:0 0 4px;}
+  .section-title{font-family:'Archivo',sans-serif; font-size:16px; font-weight:600; margin:0 0 4px;}
   .section-hint{font-size:12px; color:var(--ink-soft); margin:0 0 4px;}
 
   /* ---------- Narrative report ---------- */
@@ -324,7 +325,7 @@
   .stat-block table.data-table{margin-top:6px;}
   .narrative-textarea{
     width:100%; min-height:110px; padding:12px; border-radius:8px; border:1px solid var(--sage-line);
-    background:var(--paper); font-family:'Inter',sans-serif; font-size:13.5px; line-height:1.55; resize:vertical;
+    background:var(--paper); font-family:'IBM Plex Sans',sans-serif; font-size:13.5px; line-height:1.55; resize:vertical;
   }
   .narrative-textarea:focus{outline:2px solid var(--gold); outline-offset:1px;}
   .report-meta-row{display:flex; flex-wrap:wrap; gap:14px; align-items:end;}
@@ -344,7 +345,7 @@
   .sponsor-card{
     background:var(--sage); border:1px solid var(--sage-line); border-radius:10px; padding:14px 16px;
   }
-  .sponsor-card h4{margin:0 0 2px; font-family:'Playfair Display',serif; font-size:15px; color:var(--ink);}
+  .sponsor-card h4{margin:0 0 2px; font-family:'Archivo',sans-serif; font-size:15px; color:var(--ink);}
   .sponsor-card .sponsor-contact{font-size:12px; color:var(--ink-soft); margin-bottom:8px;}
   .sponsor-card .sponsor-notes{font-size:12px; color:var(--ink-soft); font-style:italic; margin-bottom:8px;}
   .cohort-pill-row{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
@@ -369,7 +370,7 @@
   .chip-used{background:#DCEBD9; color:#2E6B34;}
   .allocation-row select, .allocation-row input{
     width:100%; padding:8px 9px; border-radius:8px; border:1px solid var(--sage-line);
-    background:var(--sage); font-family:'Inter',sans-serif; font-size:13px; color:var(--ink);
+    background:var(--sage); font-family:'IBM Plex Sans',sans-serif; font-size:13px; color:var(--ink);
   }
 
   /* ---------- Login ---------- */
@@ -383,21 +384,21 @@
   }
   .login-card .emblem img{ height:56px; display:block; margin:0 auto 14px; }
   .login-card h2{
-    font-family:'Playfair Display',serif; font-size:19px; color:var(--ink); text-align:center; margin:0 0 4px;
+    font-family:'Archivo',sans-serif; font-size:19px; color:var(--ink); text-align:center; margin:0 0 4px;
   }
   .login-card p.sub{ text-align:center; font-size:12.5px; color:var(--ink-soft); margin:0 0 20px; }
   .login-card .field{ margin-bottom:14px; }
   .login-card label{ display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; }
   .login-card input{
     width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--sage-line);
-    background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px; color:var(--ink);
+    background:var(--sage); font-family:'IBM Plex Sans',sans-serif; font-size:13.5px; color:var(--ink);
   }
   .login-card button{ width:100%; margin-top:6px; }
   #loginError{ color:var(--red); font-size:12.5px; margin-top:10px; text-align:center; display:none; }
   .login-card .forgot-link{ text-align:center; margin-top:12px; }
   .login-card .forgot-link button{
     background:none; border:none; width:auto; margin:0; padding:0; color:var(--ink-soft);
-    text-decoration:underline; cursor:pointer; font-size:12.5px; font-family:'Inter',sans-serif;
+    text-decoration:underline; cursor:pointer; font-size:12.5px; font-family:'IBM Plex Sans',sans-serif;
   }
   .login-card .forgot-link button:hover{ color:var(--ink); }
   #forgotPasswordPanel, #resetPasswordPanel{ display:none; }
@@ -406,7 +407,7 @@
   .back-to-signin{ text-align:center; margin-top:12px; }
   .back-to-signin button{
     background:none; border:none; width:auto; margin:0; padding:0; color:var(--ink-soft);
-    text-decoration:underline; cursor:pointer; font-size:12.5px; font-family:'Inter',sans-serif;
+    text-decoration:underline; cursor:pointer; font-size:12.5px; font-family:'IBM Plex Sans',sans-serif;
   }
 
   .user-bar{
@@ -422,13 +423,13 @@
   .subnav{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
   .subnav button{
     padding:8px 16px; border-radius:8px; border:1px solid var(--sage-line); background:var(--sage);
-    font-family:'Inter',sans-serif; font-size:13px; color:var(--ink-soft); cursor:pointer;
+    font-family:'IBM Plex Sans',sans-serif; font-size:13px; color:var(--ink-soft); cursor:pointer;
   }
   .subnav button.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
 
   .demo-section{ margin-bottom:22px; }
   .demo-section-title{
-    font-family:'Playfair Display',serif; font-size:15px; color:var(--ink); margin-bottom:10px;
+    font-family:'Archivo',sans-serif; font-size:15px; color:var(--ink); margin-bottom:10px;
     border-bottom:1px solid var(--sage-line); padding-bottom:6px;
   }
   .demo-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
@@ -438,7 +439,7 @@
   .demo-field label{ display:block; font-size:12px; color:var(--ink-soft); margin-bottom:5px; }
   .demo-field input[type=text], .demo-field input[type=number], .demo-field select, .demo-field textarea{
     width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--sage-line);
-    background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px; color:var(--ink);
+    background:var(--sage); font-family:'IBM Plex Sans',sans-serif; font-size:13.5px; color:var(--ink);
   }
   .demo-field textarea{ min-height:70px; resize:vertical; }
   .option-row{ display:flex; flex-wrap:wrap; gap:14px; }
@@ -829,7 +830,7 @@
           <div id="peiiDimArea"></div>
           <div style="margin-top:16px;">
             <label style="display:block; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:600; margin-bottom:6px;">Qualitative feedback</label>
-            <textarea id="peiiFeedback" rows="3" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--sage-line); background:var(--sage); font-family:'Inter',sans-serif; font-size:13.5px;" placeholder="Any comments from the beneficiary about this quarter's programme experience..."></textarea>
+            <textarea id="peiiFeedback" rows="3" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--sage-line); background:var(--sage); font-family:'IBM Plex Sans',sans-serif; font-size:13.5px;" placeholder="Any comments from the beneficiary about this quarter's programme experience..."></textarea>
           </div>
         </div>
       </div>
@@ -2210,12 +2211,12 @@ async function renderMonitor(){
   trendChartInstance = new Chart(ctx, {
     type:'line',
     data:{ labels, datasets:[
-      dataset('ERI','#4E7D73'), dataset('BHI','#C98A2C'), dataset('SRI','#2F9E5B'), dataset('AII','#1E3A34')
+      dataset('ERI','#4E9C27'), dataset('BHI','#0B80BE'), dataset('SRI','#6FA8BF'), dataset('AII','#074159')
     ]},
     options:{
       responsive:true, maintainAspectRatio:false,
       scales:{ y:{ min:0, max:100, ticks:{callback:v=>v+'%'} } },
-      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'Inter',size:11}} } }
+      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'IBM Plex Sans',size:11}} } }
     }
   });
 
@@ -2824,7 +2825,7 @@ async function renderDashboard(){
     type: 'bar',
     data: {
       labels: diagPeriods,
-      datasets: [{ label: 'Assessments saved', data: diagPeriods.map(p => diagCounts[p] || 0), backgroundColor: '#5b7a63' }],
+      datasets: [{ label: 'Assessments saved', data: diagPeriods.map(p => diagCounts[p] || 0), backgroundColor: '#0B80BE' }],
     },
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } },
   });
@@ -2837,7 +2838,7 @@ async function renderDashboard(){
     type: 'bar',
     data: {
       labels: entPeriods,
-      datasets: [{ label: 'Surveys completed', data: entPeriods.map(p => entCounts[p] || 0), backgroundColor: '#A8823C' }],
+      datasets: [{ label: 'Surveys completed', data: entPeriods.map(p => entCounts[p] || 0), backgroundColor: '#4E9C27' }],
     },
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } },
   });
@@ -3998,14 +3999,14 @@ async function renderProfile(){
   profileChartInstance = new Chart(ctx, {
     type:'line',
     data:{ labels: periodsWithData, datasets:[
-      { label:'ERI', data:seriesFor('ERI'), borderColor:'#4E7D73', backgroundColor:'#4E7D73', tension:0.3, spanGaps:true, pointRadius:3 },
-      { label:'BHI', data:seriesFor('BHI'), borderColor:'#C98A2C', backgroundColor:'#C98A2C', tension:0.3, spanGaps:true, pointRadius:3 },
-      { label:'SRI', data:seriesFor('SRI'), borderColor:'#2F9E5B', backgroundColor:'#2F9E5B', tension:0.3, spanGaps:true, pointRadius:3 },
-      { label:'AII', data:aiiSeries, borderColor:'#1E3A34', backgroundColor:'#1E3A34', tension:0.3, spanGaps:true, pointRadius:3, borderWidth:3 },
+      { label:'ERI', data:seriesFor('ERI'), borderColor:'#4E9C27', backgroundColor:'#4E9C27', tension:0.3, spanGaps:true, pointRadius:3 },
+      { label:'BHI', data:seriesFor('BHI'), borderColor:'#0B80BE', backgroundColor:'#0B80BE', tension:0.3, spanGaps:true, pointRadius:3 },
+      { label:'SRI', data:seriesFor('SRI'), borderColor:'#6FA8BF', backgroundColor:'#6FA8BF', tension:0.3, spanGaps:true, pointRadius:3 },
+      { label:'AII', data:aiiSeries, borderColor:'#074159', backgroundColor:'#074159', tension:0.3, spanGaps:true, pointRadius:3, borderWidth:3 },
     ]},
     options:{ responsive:true, maintainAspectRatio:false,
       scales:{ y:{ min:0, max:100, ticks:{callback:v=>v+'%'} } },
-      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'Inter',size:11}} } } }
+      plugins:{ legend:{ position:'bottom', labels:{boxWidth:10, font:{family:'IBM Plex Sans',size:11}} } } }
   });
 
   // Where a period has both an admin-entered assessment AND a self-reported
@@ -4736,13 +4737,13 @@ async function prepareReportExport(){
 }
 
 const REPORT_PRINT_CSS = `
-    body{font-family:Georgia,'Times New Roman',serif; color:#1A1A1A; max-width:760px; margin:40px auto; padding:0 20px; line-height:1.6;}
-    header{display:flex; align-items:center; gap:20px; border-bottom:3px solid #1A1A1A; padding-bottom:16px; margin-bottom:6px;}
+    body{font-family:Georgia,'Times New Roman',serif; color:#0A2E3D; max-width:760px; margin:40px auto; padding:0 20px; line-height:1.6;}
+    header{display:flex; align-items:center; gap:20px; border-bottom:3px solid #074159; padding-bottom:16px; margin-bottom:6px;}
     header img{height:64px;}
     h1{font-size:22px; margin:0 0 4px;}
     .meta{font-size:12.5px; color:#555; margin-bottom:28px;}
     h2{font-size:16px; border-bottom:1px solid #ccc; padding-bottom:4px; margin-top:32px;}
-    .stat{background:#F7F5F0; border:1px solid #E3DDCF; border-radius:6px; padding:10px 14px; font-size:12.5px; margin:10px 0;}
+    .stat{background:#F1F6F8; border:1px solid #D5E3E9; border-radius:6px; padding:10px 14px; font-size:12.5px; margin:10px 0;}
     table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
     th,td{text-align:left; padding:5px 7px; border-bottom:1px solid #ddd;}
     p{font-size:13.5px; margin:8px 0;}
@@ -4757,20 +4758,20 @@ const REPORT_PRINT_CSS = `
 // RAG colour lookup as hex values (the report is a standalone exported
 // document, so it can't rely on the main app's .chip CSS classes).
 function reportRagHex(pct){
-  if(pct === null || pct === undefined) return { fg:'#8C8778', bg:'#EDEAE2' };
-  if(pct >= 80) return { fg:'#3C7A5B', bg:'#E4EEE7' };
-  if(pct >= 60) return { fg:'#B5860B', bg:'#F6EDD3' };
-  if(pct >= 40) return { fg:'#B5651D', bg:'#F3E3D3' };
-  return { fg:'#A23B34', bg:'#F2E0DD' };
+  if(pct === null || pct === undefined) return { fg:'#6C8694', bg:'#EAF0F3' };
+  if(pct >= 80) return { fg:'#2E7D32', bg:'#E3F0E0' };
+  if(pct >= 60) return { fg:'#8A6508', bg:'#FBEFD0' };
+  if(pct >= 40) return { fg:'#B5651D', bg:'#F6E6D6' };
+  return { fg:'#9A3B33', bg:'#F6DFDC' };
 }
 function reportFlagHex(flag){
   const map = {
-    High: { fg:'#A23B34', bg:'#F2E0DD' },
-    Declining: { fg:'#B5651D', bg:'#F3E3D3' },
-    Medium: { fg:'#B5651D', bg:'#F3E3D3' },
-    Watch: { fg:'#B5860B', bg:'#F6EDD3' },
-    Low: { fg:'#3C7A5B', bg:'#E4EEE7' },
-    'No Data': { fg:'#8C8778', bg:'#EDEAE2' },
+    High: { fg:'#9A3B33', bg:'#F6DFDC' },
+    Declining: { fg:'#B5651D', bg:'#F6E6D6' },
+    Medium: { fg:'#B5651D', bg:'#F6E6D6' },
+    Watch: { fg:'#8A6508', bg:'#FBEFD0' },
+    Low: { fg:'#2E7D32', bg:'#E3F0E0' },
+    'No Data': { fg:'#6C8694', bg:'#EAF0F3' },
   };
   return map[flag] || map['No Data'];
 }
@@ -4783,7 +4784,7 @@ function buildExecutiveSummaryHtml(data){
   if(!data.periodsWithData.length){
     return `<h2>6. Executive Summary Dashboard</h2><p class="np">No diagnostic data on record yet — this section will populate once an assessment is saved.</p>`;
   }
-  const neutral = { fg:'#1A1A1A', bg:'#F7F5F0' };
+  const neutral = { fg:'#0A2E3D', bg:'#F1F6F8' };
   const latestRec = data.recs[data.latestP];
   const eri = indexPctForRecord(latestRec,'ERI'), bhi = indexPctForRecord(latestRec,'BHI'), sri = indexPctForRecord(latestRec,'SRI');
 
