@@ -59,7 +59,7 @@
     <div id="usedState" style="display:none; text-align:center;">
       <p class="sub" style="margin-bottom:10px;"><b id="usedName"></b>, your account is already set up. &#10003;</p>
       <p class="sub">Log in with your phone number and the password you chose. If you've forgotten it, tap <b>Forgot password?</b> on the login page.</p>
-      <a href="/" id="goLogin" style="display:block; margin-top:14px; padding:11px; border-radius:8px; background:var(--ink); color:#fff; font-weight:600; font-size:14px; text-decoration:none;">Go to login</a>
+      <a href="/app.html" id="goLogin" style="display:block; margin-top:14px; padding:11px; border-radius:8px; background:var(--ink); color:#fff; font-weight:600; font-size:14px; text-decoration:none;">Go to login</a>
     </div>
 
     <div id="invalidState" style="display:none;">
@@ -171,7 +171,7 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
     if(signInErr) throw signInErr;
 
     successEl.style.display = 'block';
-    setTimeout(() => { window.location.href = '/'; }, 1200);
+    setTimeout(() => { window.location.href = '/app.html'; }, 1200);
   }catch(err){
     errorEl.textContent = err.message || 'Something went wrong — please try again.';
     errorEl.style.display = 'block';
