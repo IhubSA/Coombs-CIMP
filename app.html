@@ -506,6 +506,47 @@
   .upload-item{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:4px 0; }
   .upload-name{ font-size:13px; word-break:break-all; }
   .upload-btn{ display:inline-block; margin-top:6px; cursor:pointer; }
+
+  /* ---------- Overview report ---------- */
+  .ovr-controls{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin:12px 0 14px;}
+  .ovr-controls .field{margin:0; min-width:180px;}
+  .ovr-check{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-soft); padding-bottom:10px; cursor:pointer;}
+  .ovr-actions{margin-left:auto; display:flex; gap:8px; padding-bottom:2px;}
+  @media (max-width:760px){ .ovr-actions{margin-left:0;} .ovr-controls .field{min-width:140px; flex:1 1 140px;} }
+  .ovr-tabs{display:flex; gap:2px; flex-wrap:wrap; border-bottom:1px solid var(--sage-line);}
+  .ovr-tabs button{
+    border:none; background:transparent; padding:9px 14px; font-family:'IBM Plex Sans',sans-serif;
+    font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-1px;
+  }
+  .ovr-tabs button:hover{color:var(--pine);}
+  .ovr-tabs button.active{color:var(--pine); border-bottom-color:var(--gold);}
+  .ovr-strip{display:flex; flex-wrap:wrap; gap:26px; padding:14px 0 2px;}
+  .ovr-figure{font-family:'Archivo',sans-serif; font-weight:700; font-size:22px; color:var(--pine); line-height:1.15;}
+  .ovr-cap{font-size:11.5px; color:var(--ink-soft); line-height:1.35;}
+  .ovr-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .ovr-scroll table.data-table{min-width:660px;}
+  .ovr-matrix th.stage, .ovr-matrix td.stage{text-align:center; white-space:nowrap;}
+  .ovr-matrix td.who{font-weight:600; white-space:nowrap;}
+  .ovr-matrix td.meta{color:var(--ink-soft); font-size:11.5px; white-space:nowrap;}
+  .ovr-done{color:var(--green); font-weight:600;}
+  .ovr-due{color:var(--orange); font-weight:600;}
+  .ovr-sched{color:var(--ink-soft); font-style:italic;}
+  .ovr-blocked{color:var(--sage-line);}
+  .ovr-cohort-block{padding:16px 0; border-bottom:1px solid var(--sage-line);}
+  .ovr-cohort-block:last-child{border-bottom:none;}
+  .ovr-cohort-head{display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; justify-content:space-between; margin-bottom:12px;}
+  .ovr-cohort-name{font-family:'Archivo',sans-serif; font-weight:700; font-size:15px; color:var(--pine);}
+  .ovr-cohort-count{font-size:12px; color:var(--ink-soft);}
+  .ovr-rows{display:grid; gap:7px;}
+  .ovr-row{display:grid; grid-template-columns:78px 1fr 78px; gap:12px; align-items:center; font-size:12.5px;}
+  @media (max-width:560px){ .ovr-row{grid-template-columns:64px 1fr 66px; gap:8px;} }
+  .ovr-row .lbl{color:var(--ink-soft);}
+  .ovr-row .num{text-align:right; font-family:'IBM Plex Mono',monospace; font-size:12px;}
+  .ovr-bar{height:8px; border-radius:4px; background:var(--sage); overflow:hidden;}
+  .ovr-bar span{display:block; height:100%; background:var(--green); border-radius:4px;}
+  .ovr-bar.part span{background:var(--yellow);}
+  .ovr-bar.low span{background:var(--orange);}
 </style>
 </head>
 <body>
@@ -596,6 +637,38 @@
     <div class="card">
       <div class="section-title">Programme snapshot</div>
       <div class="kpi-row" id="dashKpiRow"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="section-title">Overview report</div>
+      <p class="section-hint">Who has completed what, by programme and cohort.</p>
+
+      <div class="ovr-controls">
+        <div class="field">
+          <label for="ovrProgramme">Programme</label>
+          <select id="ovrProgramme"><option value="">All programmes</option></select>
+        </div>
+        <div class="field">
+          <label for="ovrCohort">Cohort</label>
+          <select id="ovrCohort"><option value="">All cohorts</option></select>
+        </div>
+        <label class="ovr-check" for="ovrIncludeCheck">
+          <input type="checkbox" id="ovrIncludeCheck"> Include check participants
+        </label>
+        <div class="ovr-actions">
+          <button class="btn btn-ghost btn-sm" id="ovrCsvBtn" type="button">Download CSV</button>
+          <button class="btn btn-ghost btn-sm" id="ovrPrintBtn" type="button">Print</button>
+        </div>
+      </div>
+
+      <div class="ovr-tabs" id="ovrTabs">
+        <button type="button" data-ovr="matrix" class="active">Completion</button>
+        <button type="button" data-ovr="cohort">Cohort summary</button>
+        <button type="button" data-ovr="outstanding">Outstanding</button>
+        <button type="button" data-ovr="scores">Average scores</button>
+      </div>
+
+      <div id="ovrBody"><div class="empty-note">Loading…</div></div>
     </div>
 
     <div class="monitor-grid">
@@ -2787,13 +2860,499 @@ async function groupByPeriod(table, periods){
   }catch(e){ console.error(`Failed to group ${table} by period`, e); return {}; }
 }
 
+
+/* ======================= OVERVIEW REPORT =======================
+   Admin-facing completion reporting on the Dashboard: who has done
+   what, per stage, filtered by programme and cohort. The "is it open
+   yet" rules below mirror enforce_survey_timeline() in the database —
+   a fixed cohort date wins, otherwise it is N days after the previous
+   stage was completed. */
+
+const OVR_STAGES = ['Intake','Baseline','Q1','Q2','Q3','Q4'];
+const OVR_SURVEY_ORDER = ['Baseline','Q1','Q2','Q3','Q4'];
+const OVR_WAIT_DAYS = { Q1:14, Q2:90, Q3:90, Q4:90 };
+const OVR_INDEXES = ['ERI','BHI','SRI'];
+
+let ovrData = null;
+let ovrView = 'matrix';
+let ovrScoresLoaded = false;
+let ovrWired = false;
+
+function ovrKey(programme, cohort){ return `${programme || ''}||${cohort || ''}`; }
+
+function ovrShortDate(value){
+  if(!value) return '';
+  return new Date(value).toLocaleDateString('en-ZA', { day:'numeric', month:'short' });
+}
+function ovrFullDate(value){
+  return value ? new Date(value).toLocaleString() : '';
+}
+function ovrDaysSince(value){
+  return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000));
+}
+// YYYY-MM-DD in the viewer's own timezone. toISOString() would shift a
+// midnight-SAST cohort date back to the previous day.
+function ovrIsoLocal(value){
+  const d = new Date(value);
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function loadOverviewData(){
+  const [bens, demos, surveys, cohorts] = await Promise.all([
+    db.from('beneficiaries').select('name,programme,cohort,is_check,created_at').order('name'),
+    db.from('enterprise_demographics').select('beneficiary,saved_at'),
+    db.from('enterprise_survey_responses').select('beneficiary,period,saved_at'),
+    db.from('cohort_settings').select('*'),
+  ]);
+
+  const intake = {};
+  (demos.data || []).forEach(r => { intake[r.beneficiary] = r.saved_at; });
+
+  // Keep the most recent response per beneficiary/period.
+  const byPerson = {};
+  (surveys.data || []).forEach(r => {
+    if(!byPerson[r.beneficiary]) byPerson[r.beneficiary] = {};
+    const existing = byPerson[r.beneficiary][r.period];
+    if(!existing || new Date(r.saved_at) > new Date(existing.saved_at)) byPerson[r.beneficiary][r.period] = r;
+  });
+
+  const dates = {};
+  (cohorts.data || []).forEach(r => { dates[ovrKey(r.programme, r.cohort)] = r; });
+
+  ovrData = { people: bens.data || [], intake, surveys: byPerson, dates };
+  ovrScoresLoaded = false;
+  return ovrData;
+}
+
+// Item-level scores are only needed by the Average scores tab, and they are by
+// far the heaviest thing in this table, so they load on demand rather than on
+// every dashboard render.
+async function ensureOvrScores(){
+  if(ovrScoresLoaded || !ovrData) return;
+  const { data, error } = await db.from('enterprise_survey_responses').select('beneficiary,period,scores,saved_at');
+  if(error) throw error;
+  (data || []).forEach(r => {
+    const rec = (ovrData.surveys[r.beneficiary] || {})[r.period];
+    if(rec && rec.saved_at === r.saved_at) rec.scores = r.scores;
+  });
+  ovrScoresLoaded = true;
+}
+
+function populateOvrFilters(){
+  const progSel = document.getElementById('ovrProgramme');
+  const cohSel = document.getElementById('ovrCohort');
+  const keepProg = progSel.value, keepCoh = cohSel.value;
+
+  const programmes = [...new Set(ovrData.people.map(p => p.programme).filter(Boolean))].sort();
+  progSel.innerHTML = `<option value="">All programmes</option>` +
+    programmes.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+  if(programmes.includes(keepProg)) progSel.value = keepProg;
+
+  const chosen = progSel.value;
+  const cohorts = [...new Set(ovrData.people
+    .filter(p => !chosen || p.programme === chosen)
+    .map(p => p.cohort).filter(Boolean))].sort();
+  cohSel.innerHTML = `<option value="">All cohorts</option>` +
+    cohorts.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  if(cohorts.includes(keepCoh)) cohSel.value = keepCoh;
+}
+
+function ovrPeople(){
+  const programme = document.getElementById('ovrProgramme').value;
+  const cohort = document.getElementById('ovrCohort').value;
+  const includeCheck = document.getElementById('ovrIncludeCheck').checked;
+  return ovrData.people.filter(b =>
+    (includeCheck || !b.is_check) &&
+    (!programme || b.programme === programme) &&
+    (!cohort || b.cohort === cohort));
+}
+
+function ovrCompletedAt(name, stage){
+  if(stage === 'Intake') return ovrData.intake[name] || null;
+  const rec = (ovrData.surveys[name] || {})[stage];
+  return rec ? rec.saved_at : null;
+}
+
+// When this stage becomes available to this person.
+// Returns null while an earlier stage is still outstanding.
+function ovrOpensAt(ben, stage){
+  if(stage === 'Intake') return ben.created_at ? new Date(ben.created_at) : new Date();
+  if(stage === 'Baseline'){
+    const at = ovrData.intake[ben.name];
+    return at ? new Date(at) : null;
+  }
+  const prev = OVR_SURVEY_ORDER[OVR_SURVEY_ORDER.indexOf(stage) - 1];
+  const prevAt = ovrCompletedAt(ben.name, prev);
+  if(!prevAt) return null;
+  const settings = ovrData.dates[ovrKey(ben.programme, ben.cohort)];
+  const fixed = settings ? settings[stage.toLowerCase() + '_open_date'] : null;
+  if(fixed) return new Date(`${fixed}T00:00:00+02:00`);
+  return new Date(new Date(prevAt).getTime() + OVR_WAIT_DAYS[stage] * 86400000);
+}
+
+// One of: done | due | scheduled | blocked
+function ovrStageState(ben, stage){
+  const at = ovrCompletedAt(ben.name, stage);
+  if(at) return { state:'done', at };
+  const opens = ovrOpensAt(ben, stage);
+  if(opens === null) return { state:'blocked' };
+  if(opens.getTime() > Date.now()) return { state:'scheduled', opens };
+  return { state:'due', opens };
+}
+
+/* ---------- view: completion matrix ---------- */
+function ovrMatrixHtml(){
+  const people = ovrPeople();
+  if(!people.length) return `<div class="empty-note">No beneficiaries match those filters.</div>`;
+
+  const totals = {};
+  OVR_STAGES.forEach(s => totals[s] = 0);
+
+  const rows = people.map(ben => {
+    const cells = OVR_STAGES.map(stage => {
+      const st = ovrStageState(ben, stage);
+      if(st.state === 'done'){
+        totals[stage]++;
+        return `<td class="stage"><span class="ovr-done" title="Completed ${escapeHtml(ovrFullDate(st.at))}">${ovrShortDate(st.at)}</span></td>`;
+      }
+      if(st.state === 'due'){
+        return `<td class="stage"><span class="ovr-due" title="Open since ${escapeHtml(st.opens.toLocaleDateString())} — ${ovrDaysSince(st.opens)} days">due</span></td>`;
+      }
+      if(st.state === 'scheduled'){
+        return `<td class="stage"><span class="ovr-sched" title="Opens ${escapeHtml(st.opens.toLocaleDateString())}">${ovrShortDate(st.opens)}</span></td>`;
+      }
+      return `<td class="stage"><span class="ovr-blocked" title="Waiting on the previous stage">—</span></td>`;
+    }).join('');
+
+    const tag = ben.is_check ? ' <span class="chip chip-grey">check</span>' : '';
+    return `<tr>
+      <td class="who">${escapeHtml(ben.name)}${tag}</td>
+      <td class="meta">${escapeHtml(ben.programme || '—')}</td>
+      <td class="meta">${escapeHtml(ben.cohort || '—')}</td>
+      ${cells}</tr>`;
+  }).join('');
+
+  const foot = OVR_STAGES.map(s =>
+    `<td class="stage">${totals[s]}/${people.length}</td>`).join('');
+
+  return `<div class="ovr-scroll"><table class="data-table ovr-matrix">
+    <thead><tr>
+      <th>Beneficiary</th><th>Programme</th><th>Cohort</th>
+      ${OVR_STAGES.map(s => `<th class="stage">${s}</th>`).join('')}
+    </tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td colspan="3">Completed</td>${foot}</tr></tfoot>
+  </table></div>
+  <p class="section-hint" style="margin-top:10px;">
+    A date means completed. <span class="ovr-due">due</span> means the survey is open and outstanding.
+    A future date is when it opens for that cohort. <span class="ovr-blocked">—</span> means an earlier stage is still outstanding.
+  </p>`;
+}
+
+/* ---------- view: cohort summary ---------- */
+function ovrCohortGroups(){
+  const groups = new Map();
+  ovrPeople().forEach(b => {
+    const key = ovrKey(b.programme, b.cohort);
+    if(!groups.has(key)) groups.set(key, { programme:b.programme || '—', cohort:b.cohort || '—', people:[] });
+    groups.get(key).people.push(b);
+  });
+  return [...groups.values()].sort((a, b) =>
+    (a.programme + a.cohort).localeCompare(b.programme + b.cohort));
+}
+
+function ovrCohortHtml(){
+  const groups = ovrCohortGroups();
+  if(!groups.length) return `<div class="empty-note">No beneficiaries match those filters.</div>`;
+
+  return groups.map(g => {
+    const rows = OVR_STAGES.map(stage => {
+      const done = g.people.filter(b => ovrCompletedAt(b.name, stage)).length;
+      const pct = g.people.length ? Math.round(done / g.people.length * 100) : 0;
+      const cls = pct >= 80 ? '' : pct >= 40 ? ' part' : ' low';
+      return `<div class="ovr-row">
+        <div class="lbl">${stage}</div>
+        <div class="ovr-bar${cls}"><span style="width:${pct}%"></span></div>
+        <div class="num">${done}/${g.people.length} · ${pct}%</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="ovr-cohort-block">
+      <div class="ovr-cohort-head">
+        <div class="ovr-cohort-name">${escapeHtml(g.programme)} — ${escapeHtml(g.cohort)}</div>
+        <div class="ovr-cohort-count">${g.people.length} beneficiar${g.people.length === 1 ? 'y' : 'ies'}</div>
+      </div>
+      <div class="ovr-rows">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- view: outstanding ---------- */
+function ovrOutstandingRows(){
+  const rows = [];
+  ovrPeople().forEach(ben => {
+    for(const stage of OVR_STAGES){
+      if(ovrCompletedAt(ben.name, stage)) continue;
+      const st = ovrStageState(ben, stage);
+      if(st.state === 'blocked') break;
+      rows.push({
+        name: ben.name,
+        programme: ben.programme || '—',
+        cohort: ben.cohort || '—',
+        stage,
+        state: st.state,
+        opens: st.opens,
+        days: st.state === 'due' ? ovrDaysSince(st.opens) : null,
+      });
+      break; // only the next thing each person owes
+    }
+  });
+  rows.sort((a, b) => {
+    if(a.state !== b.state) return a.state === 'due' ? -1 : 1;
+    if(a.state === 'due') return b.days - a.days;
+    return a.opens - b.opens;
+  });
+  return rows;
+}
+
+function ovrOutstandingHtml(){
+  const rows = ovrOutstandingRows();
+  if(!rows.length) return `<div class="empty-note">Nothing outstanding — everyone is up to date.</div>`;
+
+  const dueCount = rows.filter(r => r.state === 'due').length;
+  const body = rows.map(r => `<tr>
+    <td class="who">${escapeHtml(r.name)}</td>
+    <td class="meta">${escapeHtml(r.programme)}</td>
+    <td class="meta">${escapeHtml(r.cohort)}</td>
+    <td>${r.stage}</td>
+    <td>${r.state === 'due'
+      ? `<span class="ovr-due">open</span>`
+      : `<span class="ovr-sched">opens ${escapeHtml(r.opens.toLocaleDateString('en-ZA', { day:'numeric', month:'short', year:'numeric' }))}</span>`}</td>
+    <td class="num">${r.days === null ? '—' : r.days + ' day' + (r.days === 1 ? '' : 's')}</td>
+  </tr>`).join('');
+
+  return `<div class="ovr-strip">
+      <div><div class="ovr-figure">${dueCount}</div><div class="ovr-cap">open and outstanding<br>right now</div></div>
+      <div><div class="ovr-figure">${rows.length - dueCount}</div><div class="ovr-cap">waiting for a survey<br>date to arrive</div></div>
+    </div>
+    <div class="ovr-scroll"><table class="data-table">
+    <thead><tr><th>Beneficiary</th><th>Programme</th><th>Cohort</th><th>Owes</th><th>Status</th><th>Outstanding</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
+
+/* ---------- view: average scores ---------- */
+function ovrScoreRows(){
+  const people = ovrPeople();
+  return OVR_SURVEY_ORDER.map(period => {
+    const recs = people.map(b => (ovrData.surveys[b.name] || {})[period]).filter(Boolean);
+    if(!recs.length) return { period, n:0 };
+    const avg = {};
+    OVR_INDEXES.forEach(key => {
+      const vals = recs.map(r => pctFromScores(r.scores || {}, key)).filter(v => v !== null).map(v => v.pct);
+      avg[key] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    });
+    const aiis = recs.map(r => computeAII(
+      pctFromScores(r.scores || {}, 'ERI'),
+      pctFromScores(r.scores || {}, 'BHI'),
+      pctFromScores(r.scores || {}, 'SRI'))).filter(v => v !== null);
+    avg.AII = aiis.length ? aiis.reduce((a, b) => a + b, 0) / aiis.length : null;
+    return { period, n: recs.length, avg };
+  }).filter(r => r.n > 0);
+}
+
+function ovrScoresHtml(){
+  const rows = ovrScoreRows();
+  if(!rows.length) return `<div class="empty-note">No surveys have been completed for these filters yet.</div>`;
+
+  const fmt = v => v === null || v === undefined ? '—' : v.toFixed(1) + '%';
+  const body = rows.map(r => {
+    const rag = ragFor(r.avg.AII);
+    return `<tr>
+      <td class="who">${r.period}</td>
+      <td class="num">${r.n}</td>
+      <td class="num">${fmt(r.avg.ERI)}</td>
+      <td class="num">${fmt(r.avg.BHI)}</td>
+      <td class="num">${fmt(r.avg.SRI)}</td>
+      <td class="num"><b>${fmt(r.avg.AII)}</b></td>
+      <td><span class="chip ${rag.cls}">${rag.label}</span></td>
+    </tr>`;
+  }).join('');
+
+  const first = rows[0], last = rows[rows.length - 1];
+  const movement = (rows.length > 1 && first.avg.AII !== null && last.avg.AII !== null)
+    ? `<div class="ovr-strip">
+         <div><div class="ovr-figure">${first.avg.AII.toFixed(1)}%</div><div class="ovr-cap">${first.period}<br>overall index</div></div>
+         <div><div class="ovr-figure">${last.avg.AII.toFixed(1)}%</div><div class="ovr-cap">${last.period}<br>overall index</div></div>
+         <div><div class="ovr-figure">${(last.avg.AII - first.avg.AII >= 0 ? '+' : '')}${(last.avg.AII - first.avg.AII).toFixed(1)}</div><div class="ovr-cap">percentage points<br>of movement</div></div>
+       </div>` : '';
+
+  return `${movement}<div class="ovr-scroll"><table class="data-table">
+    <thead><tr><th>Period</th><th class="num">Surveys</th><th class="num">ERI</th><th class="num">BHI</th><th class="num">SRI</th><th class="num">Overall</th><th>Rating</th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+    <p class="section-hint" style="margin-top:10px;">Averaged across every completed survey for the selected filters. Overall is weighted 30 / 40 / 30.</p>`;
+}
+
+/* ---------- render + export ---------- */
+function ovrFilterLabel(){
+  const p = document.getElementById('ovrProgramme').value || 'All programmes';
+  const c = document.getElementById('ovrCohort').value || 'All cohorts';
+  return `${p} — ${c}`;
+}
+
+function renderOverviewReport(){
+  const body = document.getElementById('ovrBody');
+  if(!body) return;
+  if(!ovrData){ body.innerHTML = `<div class="empty-note">Loading…</div>`; return; }
+  try{
+    if(ovrView === 'matrix') body.innerHTML = ovrMatrixHtml();
+    else if(ovrView === 'cohort') body.innerHTML = ovrCohortHtml();
+    else if(ovrView === 'outstanding') body.innerHTML = ovrOutstandingHtml();
+    else body.innerHTML = ovrScoresHtml();
+  }catch(e){
+    console.error('Overview report failed to render', e);
+    body.innerHTML = `<div class="empty-note">Could not build the report. Please refresh and try again.</div>`;
+  }
+}
+
+function ovrCsvRows(){
+  const people = ovrPeople();
+  if(ovrView === 'matrix'){
+    const head = ['Beneficiary','Programme','Cohort', ...OVR_STAGES];
+    const rows = people.map(b => [b.name, b.programme || '', b.cohort || '', ...OVR_STAGES.map(stage => {
+      const st = ovrStageState(b, stage);
+      if(st.state === 'done') return ovrIsoLocal(st.at);
+      if(st.state === 'due') return 'Outstanding';
+      if(st.state === 'scheduled') return 'Opens ' + ovrIsoLocal(st.opens);
+      return 'Not open';
+    })]);
+    return [head, ...rows];
+  }
+  if(ovrView === 'cohort'){
+    const head = ['Programme','Cohort','Beneficiaries', ...OVR_STAGES.map(s => s + ' done'), ...OVR_STAGES.map(s => s + ' %')];
+    return [head, ...ovrCohortGroups().map(g => {
+      const done = OVR_STAGES.map(s => g.people.filter(b => ovrCompletedAt(b.name, s)).length);
+      return [g.programme, g.cohort, g.people.length, ...done,
+        ...done.map(d => g.people.length ? Math.round(d / g.people.length * 100) : 0)];
+    })];
+  }
+  if(ovrView === 'outstanding'){
+    return [['Beneficiary','Programme','Cohort','Owes','Status','Days outstanding'],
+      ...ovrOutstandingRows().map(r => [r.name, r.programme, r.cohort, r.stage,
+        r.state === 'due' ? 'Open' : 'Opens ' + ovrIsoLocal(r.opens),
+        r.days === null ? '' : r.days])];
+  }
+  const fmt = v => v === null || v === undefined ? '' : v.toFixed(1);
+  return [['Period','Surveys','ERI %','BHI %','SRI %','Overall %'],
+    ...ovrScoreRows().map(r => [r.period, r.n, fmt(r.avg.ERI), fmt(r.avg.BHI), fmt(r.avg.SRI), fmt(r.avg.AII)])];
+}
+
+function ovrDownloadCsv(){
+  const esc = v => {
+    const s = String(v === null || v === undefined ? '' : v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = ovrCsvRows().map(r => r.map(esc).join(',')).join('\r\n');
+  const stamp = new Date().toISOString().slice(0, 10);
+  const blob = new Blob(['﻿' + csv], { type:'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `CIMP overview — ${ovrView} — ${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+function ovrPrint(){
+  const titles = { matrix:'Completion', cohort:'Cohort summary', outstanding:'Outstanding', scores:'Average scores' };
+  const win = window.open('', '_blank');
+  if(!win){ showToast('Allow pop-ups to print this report.'); return; }
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8">
+    <title>CIMP overview report — ${titles[ovrView]}</title><style>
+      body{font-family:Georgia,'Times New Roman',serif; color:#0A2E3D; max-width:1000px; margin:30px auto; padding:0 20px;}
+      h1{font-size:20px; margin:0 0 4px; color:#074159;}
+      .meta{font-size:12px; color:#51707E; margin-bottom:18px; border-bottom:2px solid #074159; padding-bottom:10px;}
+      table{width:100%; border-collapse:collapse; font-size:12px; margin-top:8px;}
+      th{text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#51707E; padding:6px 8px; border-bottom:1px solid #D5E3E9;}
+      td{padding:6px 8px; border-bottom:1px solid #D5E3E9;}
+      tfoot td{font-weight:700;}
+      .stage,.num{text-align:center;}
+      .ovr-done{color:#2E7D32; font-weight:700;} .ovr-due{color:#B5651D; font-weight:700;}
+      .ovr-sched{color:#51707E;} .ovr-blocked{color:#C7D6DD;}
+      .ovr-scroll{overflow:visible;}
+      .ovr-cohort-block{padding:12px 0; border-bottom:1px solid #D5E3E9;}
+      .ovr-cohort-name{font-weight:700; font-size:14px; color:#074159;}
+      .ovr-cohort-count{font-size:11px; color:#51707E;}
+      .ovr-row{display:grid; grid-template-columns:80px 1fr 90px; gap:10px; align-items:center; font-size:12px; margin:5px 0;}
+      .ovr-bar{height:8px; background:#EAF0F3; border-radius:4px; overflow:hidden;}
+      .ovr-bar span{display:block; height:100%; background:#2E7D32;}
+      .ovr-strip{display:flex; gap:26px; margin:10px 0 16px;}
+      .ovr-figure{font-size:20px; font-weight:700; color:#074159;}
+      .ovr-cap{font-size:11px; color:#51707E;}
+      .chip{font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; background:#EAF0F3;}
+      .section-hint{font-size:11px; color:#51707E;}
+      @media print{ body{margin:0;} }
+    </style></head><body>
+    <h1>CIMP overview report — ${titles[ovrView]}</h1>
+    <div class="meta">${escapeHtml(ovrFilterLabel())} · Generated ${new Date().toLocaleString()}</div>
+    ${document.getElementById('ovrBody').innerHTML}
+    </body></html>`);
+  win.document.close();
+  setTimeout(() => win.print(), 350);
+}
+
+function wireOverviewReport(){
+  if(ovrWired) return;
+  const tabs = document.getElementById('ovrTabs');
+  if(!tabs) return;
+  tabs.addEventListener('click', async ev => {
+    const btn = ev.target.closest('button[data-ovr]');
+    if(!btn) return;
+    ovrView = btn.dataset.ovr;
+    [...tabs.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
+    if(ovrView === 'scores' && !ovrScoresLoaded){
+      document.getElementById('ovrBody').innerHTML = `<div class="empty-note">Loading scores…</div>`;
+      try{ await ensureOvrScores(); }
+      catch(e){
+        console.error('Could not load survey scores', e);
+        document.getElementById('ovrBody').innerHTML = `<div class="empty-note">Could not load the scores.</div>`;
+        return;
+      }
+    }
+    renderOverviewReport();
+  });
+  document.getElementById('ovrProgramme').addEventListener('change', () => { populateOvrFilters(); renderOverviewReport(); });
+  document.getElementById('ovrCohort').addEventListener('change', renderOverviewReport);
+  document.getElementById('ovrIncludeCheck').addEventListener('change', renderOverviewReport);
+  document.getElementById('ovrCsvBtn').addEventListener('click', ovrDownloadCsv);
+  document.getElementById('ovrPrintBtn').addEventListener('click', ovrPrint);
+  ovrWired = true;
+}
+
+async function refreshOverviewReport(){
+  try{
+    wireOverviewReport();
+    await loadOverviewData();
+    populateOvrFilters();
+    renderOverviewReport();
+  }catch(e){
+    console.error('Failed to load the overview report', e);
+    const body = document.getElementById('ovrBody');
+    if(body) body.innerHTML = `<div class="empty-note">Could not load the report data.</div>`;
+  }
+}
+
 let dashDiagnosticChartInstance = null;
 let dashEnterpriseChartInstance = null;
 
 async function renderDashboard(){
   const kpiRow = document.getElementById('dashKpiRow');
   kpiRow.innerHTML = `<div class="kpi-card" style="grid-column:1/-1;"><div class="kpi-label">Loading…</div></div>`;
+  console.time('CIMP dashboard: total');
+  console.time('CIMP dashboard: beneficiary list');
   await loadBeneficiaryList(); // refreshes the set of check participants
+  console.timeEnd('CIMP dashboard: beneficiary list');
+  console.time('CIMP dashboard: KPI counts');
 
   const [
     beneficiaryCount, sponsorCount, cohortAllocCount, internCount,
@@ -2817,6 +3376,13 @@ async function renderDashboard(){
     <div class="kpi-card"><div class="kpi-label">Jobs & revenue periods</div><div class="kpi-value">${jrCount}</div><div class="kpi-sub">logged</div></div>
   `;
 
+  console.timeEnd('CIMP dashboard: KPI counts');
+
+  // The overview report loads alongside the charts rather than after them.
+  console.time('CIMP dashboard: overview report');
+  const overviewDone = refreshOverviewReport().finally(() => console.timeEnd('CIMP dashboard: overview report'));
+
+  console.time('CIMP dashboard: charts');
   // Diagnostic assessments by period (Collect Data)
   const diagPeriods = PERIOD_ORDER;
   const diagCounts = await groupByPeriod('assessments', diagPeriods);
@@ -2843,7 +3409,14 @@ async function renderDashboard(){
     options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } },
   });
 
+  console.timeEnd('CIMP dashboard: charts');
+
+  console.time('CIMP dashboard: recent activity');
   await renderDashboardActivity();
+  console.timeEnd('CIMP dashboard: recent activity');
+
+  await overviewDone;
+  console.timeEnd('CIMP dashboard: total');
 }
 
 async function renderDashboardActivity(){
