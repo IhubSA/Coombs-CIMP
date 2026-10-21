@@ -2663,13 +2663,13 @@ async function unassignCohort(key){
 /* ============================ BENEFICIARY INVITES ============================ */
 
 async function createInvite(){
-  const name = document.getElementById('inviteNameInput').value.trim();
-  const phone = document.getElementById('invitePhoneInput').value.trim();
-  const programme = document.getElementById('inviteProgrammeInput').value.trim();
-  const cohort = document.getElementById('inviteCohortInput').value.trim();
+  const name = tidyText(document.getElementById('inviteNameInput').value);
+  const phone = String(document.getElementById('invitePhoneInput').value).replace(/\s+/g, '');
+  const programme = tidyText(document.getElementById('inviteProgrammeInput').value);
+  const cohort = tidyText(document.getElementById('inviteCohortInput').value);
   const resultEl = document.getElementById('inviteCreateResult');
   resultEl.innerHTML = '';
-  const hostOrg = document.getElementById('inviteHostOrgInput').value.trim();
+  const hostOrg = tidyText(document.getElementById('inviteHostOrgInput').value);
   const isCheck = document.getElementById('inviteIsCheck').checked;
   if(!name || !phone || !programme || !cohort){ showToast('Fill in all fields'); return; }
   try{
@@ -2974,9 +2974,9 @@ let profEditOriginal = null;   // the values as they are in the database
 
 function profEditValues(){
   return {
-    name: document.getElementById('profEditName').value.trim(),
-    programme: document.getElementById('profEditProgramme').value.trim(),
-    cohort: document.getElementById('profEditCohort').value.trim(),
+    name: tidyText(document.getElementById('profEditName').value),
+    programme: tidyText(document.getElementById('profEditProgramme').value),
+    cohort: tidyText(document.getElementById('profEditCohort').value),
   };
 }
 
@@ -4088,6 +4088,12 @@ let currentHostOrg = 'Angels Resource Centres';
 const DOC_BUCKET = 'beneficiary-documents';
 
 function nameSlug(n){ return String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
+
+// Names and programmes are routinely pasted out of a spreadsheet, which
+// brings tab characters and double spaces with them. They look fine on
+// screen and then surface in CSV exports and funder reports, so every run
+// of whitespace is collapsed to a single space on the way in.
+function tidyText(v){ return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
 function benLabel(n){
   if(archivedNames.has(n)) return n + ' (archived)';
   return checkNames.has(n) ? n + ' (check)' : n;
