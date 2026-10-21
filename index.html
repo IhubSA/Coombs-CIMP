@@ -8,6 +8,17 @@
 <meta property="og:title" content="CIMP — Community Integrated MEL Platform">
 <meta property="og:description" content="Measure what your enterprise development programme actually changes.">
 <meta property="og:type" content="website">
+<script>
+// Supabase sends invitation, password-reset and email-confirmation links to
+// the site's root. The app lives at /app.html, so hand the one-time token
+// over to it rather than silently swallowing it on the marketing page.
+(function(){
+  var tail = (window.location.search || '') + (window.location.hash || '');
+  if(/[#&?](access_token|token_hash|error_code)=/.test(tail) || /[#&?]type=(recovery|invite|signup)/.test(tail)){
+    window.location.replace('/app.html' + tail);
+  }
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,400..800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">

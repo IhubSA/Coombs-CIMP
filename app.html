@@ -507,6 +507,35 @@
   .upload-name{ font-size:13px; word-break:break-all; }
   .upload-btn{ display:inline-block; margin-top:6px; cursor:pointer; }
 
+
+  /* ---------- Beneficiary edit panel ---------- */
+  .prof-edit-grid{display:grid; gap:12px; margin:12px 0 4px;}
+  @media (min-width:760px){ .prof-edit-grid{grid-template-columns:repeat(3,1fr);} }
+  .prof-edit-actions{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:14px;}
+  .prof-edit-spacer{flex:1 1 auto;}
+  .prof-danger{color:var(--red); border-color:var(--red-bg);}
+  .prof-danger:hover{background:var(--red-bg);}
+  .prof-danger-solid{background:var(--red); color:#fff;}
+  .prof-danger-solid:disabled{opacity:.45; cursor:not-allowed;}
+  #profRemovePanel{
+    display:none; margin-top:16px; padding:16px 18px;
+    background:var(--red-bg); border-radius:10px;
+  }
+  .prof-remove-title{font-family:'Archivo',sans-serif; font-weight:700; font-size:15px; color:var(--red); margin-bottom:6px;}
+  .prof-remove-body{font-size:13px; color:var(--ink-soft); margin:0 0 12px; max-width:68ch; line-height:1.55;}
+  .prof-impact{
+    margin-top:14px; padding:13px 16px; border-radius:10px;
+    background:var(--yellow-bg); font-size:13px; line-height:1.6;
+  }
+  .prof-impact b{color:var(--ink);}
+  .prof-impact ul{margin:6px 0 0; padding-left:20px;}
+  .prof-impact li{margin:3px 0;}
+  .prof-impact.none{background:var(--sage); color:var(--ink-soft);}
+  .prof-archived-flag{
+    display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700;
+    padding:4px 10px; border-radius:999px; background:var(--grey-bg); color:var(--grey); margin-left:8px;
+  }
+
   /* ---------- Overview report ---------- */
   .ovr-controls{display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin:12px 0 14px;}
   .ovr-controls .field{margin:0; min-width:180px;}
@@ -586,14 +615,14 @@
     </div>
 
     <div id="resetPasswordPanel">
-      <p class="sub" style="margin-bottom:16px;">Choose a new password for your account.</p>
+      <p class="sub" style="margin-bottom:16px;" id="resetPanelIntro">Choose a new password for your account.</p>
       <form id="resetPasswordForm">
         <div class="field">
-          <label for="resetPassword1">New password</label>
+          <label for="resetPassword1" id="resetPassword1Label">New password</label>
           <input type="password" id="resetPassword1" autocomplete="new-password" minlength="6" required />
         </div>
         <div class="field">
-          <label for="resetPassword2">Confirm new password</label>
+          <label for="resetPassword2" id="resetPassword2Label">Confirm new password</label>
           <input type="password" id="resetPassword2" autocomplete="new-password" minlength="6" required />
         </div>
         <button type="submit" class="btn btn-primary" id="resetSubmitBtn">Set new password</button>
@@ -847,6 +876,55 @@
           <input type="checkbox" id="profileIsCheck" style="width:auto;" />
           Check participant — exclude from all statistics
         </label>
+      </div>
+    </div>
+
+    <div class="card" id="profileEditCard" style="margin-top:16px;">
+      <div class="section-title">Edit this beneficiary</div>
+      <p class="section-hint">Move them to another programme or cohort, correct their name, or take them off the programme.</p>
+
+      <div class="prof-edit-grid">
+        <div class="field">
+          <label for="profEditName">Name</label>
+          <input type="text" id="profEditName" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="profEditProgramme">Programme</label>
+          <input type="text" id="profEditProgramme" list="profProgrammeList" autocomplete="off" />
+          <datalist id="profProgrammeList"></datalist>
+        </div>
+        <div class="field">
+          <label for="profEditCohort">Cohort</label>
+          <input type="text" id="profEditCohort" list="profCohortList" autocomplete="off" />
+          <datalist id="profCohortList"></datalist>
+        </div>
+      </div>
+
+      <div id="profEditImpact"></div>
+
+      <div class="prof-edit-actions">
+        <button class="btn btn-primary btn-sm" type="button" id="profSaveBtn">Save changes</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="profRevertBtn">Undo my edits</button>
+        <span class="prof-edit-spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="profArchiveBtn">Archive</button>
+        <button class="btn btn-ghost btn-sm prof-danger" type="button" id="profRemoveBtn">Remove from the system…</button>
+      </div>
+
+      <div id="profRemovePanel">
+        <div class="prof-remove-title">Remove <span id="profRemoveName"></span> permanently?</div>
+        <p class="prof-remove-body">
+          This deletes their intake, every survey answer, their uploaded documents record and their login.
+          It cannot be undone. If they have simply left the programme, archive them instead — that keeps
+          the data and takes them out of the statistics.
+        </p>
+        <div class="field">
+          <label for="profRemoveConfirm">Type their name to confirm</label>
+          <input type="text" id="profRemoveConfirm" autocomplete="off" />
+        </div>
+        <div class="prof-edit-actions">
+          <button class="btn btn-sm prof-danger-solid" type="button" id="profRemoveConfirmBtn" disabled>Remove permanently</button>
+          <button class="btn btn-ghost btn-sm" type="button" id="profRemoveCancelBtn">Cancel</button>
+        </div>
       </div>
     </div>
 
@@ -1382,6 +1460,7 @@ function bindAuthUI(){
       errorEl.style.display = 'block';
       return;
     }
+    const submitLabel = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Saving…';
     try{
@@ -1396,10 +1475,10 @@ function bindAuthUI(){
         location.reload();
       }, 1800);
     }catch(err){
-      errorEl.textContent = err.message || 'Could not update password — the reset link may have expired. Please request a new one.';
+      errorEl.textContent = err.message || 'Could not set that password — the link may have expired. Please ask for a new one.';
       errorEl.style.display = 'block';
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Set new password';
+      submitBtn.textContent = submitLabel;
     }
   });
 }
@@ -2001,8 +2080,9 @@ async function loadBeneficiaryList(){
   let list = [...DEFAULT_BENEFICIARIES];
   beneficiaryMeta = {};
   checkNames = new Set();
+  archivedNames = new Set();
   try{
-    const { data, error } = await db.from('beneficiaries').select('name,programme,cohort,is_check').order('name');
+    const { data, error } = await db.from('beneficiaries').select('name,programme,cohort,is_check,archived').order('name');
     if(error) throw error;
     if(data){
       // Seed the DB with the built-in defaults the first time it's empty.
@@ -2011,8 +2091,14 @@ async function loadBeneficiaryList(){
       } else {
         data.forEach(row => {
           if(!list.includes(row.name)) list.push(row.name);
-          beneficiaryMeta[row.name] = { programme: row.programme || null, cohort: row.cohort || null, is_check: !!row.is_check };
-          if(row.is_check) checkNames.add(row.name);
+          beneficiaryMeta[row.name] = {
+            programme: row.programme || null, cohort: row.cohort || null,
+            is_check: !!row.is_check, archived: !!row.archived,
+          };
+          if(row.archived) archivedNames.add(row.name);
+          // checkNames is what every statistic already filters on, so an
+          // archived person joins it and drops out of the numbers for free.
+          if(row.is_check || row.archived) checkNames.add(row.name);
         });
       }
     }
@@ -2587,9 +2673,17 @@ async function createInvite(){
   const isCheck = document.getElementById('inviteIsCheck').checked;
   if(!name || !phone || !programme || !cohort){ showToast('Fill in all fields'); return; }
   try{
+    // The host organisation is a side-setting on the programme, and only full
+    // admins may write it. If that write is refused the invite must still be
+    // created — losing the invite over an optional field is far worse than
+    // losing the field.
+    let hostOrgError = null;
     if(hostOrg){
       const { error: hoErr } = await db.from('programme_settings').upsert({ programme, host_org: hostOrg, updated_at: new Date().toISOString() }, { onConflict: 'programme' });
-      if(hoErr) throw hoErr;
+      if(hoErr){
+        console.error('Could not save the host organisation for this programme', hoErr);
+        hostOrgError = hoErr;
+      }
     }
     const { data, error } = await db.from('beneficiary_invites')
       .insert({ name, phone, programme, cohort, is_check: isCheck })
@@ -2607,11 +2701,16 @@ async function createInvite(){
     document.getElementById('inviteNameInput').value = '';
     document.getElementById('invitePhoneInput').value = '';
     document.getElementById('inviteIsCheck').checked = false;
-    showToast(`Invite created for ${name}`);
+    showToast(hostOrgError
+      ? `Invite created for ${name} — but the host organisation was not saved (you may not have admin rights for programme settings).`
+      : `Invite created for ${name}`);
     renderInviteList();
     renderProgrammeSettings();
     renderCohortSettings();
-  }catch(e){ console.error(e); showToast('Could not create invite — please try again'); }
+  }catch(e){
+    console.error('Could not create invite', e);
+    showToast(`Could not create invite: ${e.message || 'please try again'}`);
+  }
 }
 
 // Calls the send-sms Edge Function (which holds the BulkSMS credentials
@@ -2861,6 +2960,222 @@ async function groupByPeriod(table, periods){
 }
 
 
+
+/* ======================= EDIT A BENEFICIARY =======================
+   Moving someone between programmes/cohorts, correcting their name,
+   archiving them, or removing them outright.
+
+   Reporting keys off a beneficiary's CURRENT programme/cohort, so a move
+   takes their completed surveys with them and re-points their survey open
+   dates at the new cohort's schedule. Both of those are shown before the
+   change is saved rather than discovered afterwards. */
+
+let profEditOriginal = null;   // the values as they are in the database
+
+function profEditValues(){
+  return {
+    name: document.getElementById('profEditName').value.trim(),
+    programme: document.getElementById('profEditProgramme').value.trim(),
+    cohort: document.getElementById('profEditCohort').value.trim(),
+  };
+}
+
+function profFillEditPanel(name){
+  const meta = beneficiaryMeta[name] || {};
+  profEditOriginal = { name, programme: meta.programme || '', cohort: meta.cohort || '' };
+  document.getElementById('profEditName').value = profEditOriginal.name;
+  document.getElementById('profEditProgramme').value = profEditOriginal.programme;
+  document.getElementById('profEditCohort').value = profEditOriginal.cohort;
+
+  // Offer the programmes and cohorts already in use, without forcing them.
+  const progs = [...new Set(Object.values(beneficiaryMeta).map(m => m.programme).filter(Boolean))].sort();
+  const cohs  = [...new Set(Object.values(beneficiaryMeta).map(m => m.cohort).filter(Boolean))].sort();
+  document.getElementById('profProgrammeList').innerHTML = progs.map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
+  document.getElementById('profCohortList').innerHTML = cohs.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+
+  const archived = !!(meta.archived);
+  const archBtn = document.getElementById('profArchiveBtn');
+  archBtn.textContent = archived ? 'Restore from archive' : 'Archive';
+  document.getElementById('profRemovePanel').style.display = 'none';
+  document.getElementById('profRemoveConfirm').value = '';
+  document.getElementById('profRemoveConfirmBtn').disabled = true;
+  profRenderImpact();
+}
+
+// What will actually change if this is saved?
+async function profRenderImpact(){
+  const box = document.getElementById('profEditImpact');
+  if(!profEditOriginal){ box.innerHTML = ''; return; }
+  const next = profEditValues();
+  const renamed = next.name && next.name !== profEditOriginal.name;
+  const moved = next.programme !== profEditOriginal.programme || next.cohort !== profEditOriginal.cohort;
+
+  if(!renamed && !moved){
+    box.innerHTML = `<div class="prof-impact none">No changes yet.</div>`;
+    return;
+  }
+
+  const points = [];
+  if(renamed){
+    points.push(`Their name changes to <b>${escapeHtml(next.name)}</b> everywhere — intake, surveys, reports and their login record.`);
+    points.push(`Documents already uploaded stay reachable, but they remain filed under the old name in storage.`);
+  }
+  if(moved){
+    const from = `${profEditOriginal.programme || '—'} / ${profEditOriginal.cohort || '—'}`;
+    const to = `${next.programme || '—'} / ${next.cohort || '—'}`;
+    points.push(`They move from <b>${escapeHtml(from)}</b> to <b>${escapeHtml(to)}</b>.`);
+
+    try{
+      const { data: surveys } = await db.from('enterprise_survey_responses')
+        .select('period').eq('beneficiary', profEditOriginal.name);
+      const n = (surveys || []).length;
+      if(n) points.push(`<b>${n}</b> completed survey${n === 1 ? ' moves' : 's move'} with them, so both cohorts' averages will change.`);
+
+      const { data: cs } = await db.from('cohort_settings')
+        .select('q1_open_date,q2_open_date,q3_open_date,q4_open_date')
+        .eq('programme', next.programme).eq('cohort', next.cohort).maybeSingle();
+      const set = cs ? ['Q1','Q2','Q3','Q4'].filter(q => cs[q.toLowerCase() + '_open_date']) : [];
+      if(set.length){
+        const parts = set.map(q => `${q} ${new Date(cs[q.toLowerCase() + '_open_date'] + 'T00:00:00').toLocaleDateString('en-ZA', { day:'numeric', month:'short' })}`);
+        points.push(`Their survey dates follow the new cohort: ${parts.join(', ')}.`);
+      } else {
+        points.push(`The new cohort has no fixed survey dates, so they fall back to 14 days after Baseline and 90 days thereafter.`);
+      }
+    }catch(e){ console.error('Could not work out the impact of this move', e); }
+  }
+
+  box.innerHTML = `<div class="prof-impact"><b>What this change does</b><ul>${points.map(p => `<li>${p}</li>`).join('')}</ul></div>`;
+}
+
+async function profSaveEdits(){
+  if(!profEditOriginal) return;
+  const next = profEditValues();
+  const btn = document.getElementById('profSaveBtn');
+
+  if(!next.name){ showToast('A beneficiary needs a name'); return; }
+  const renamed = next.name !== profEditOriginal.name;
+  const moved = next.programme !== profEditOriginal.programme || next.cohort !== profEditOriginal.cohort;
+  if(!renamed && !moved){ showToast('Nothing to save'); return; }
+
+  if(renamed && Object.prototype.hasOwnProperty.call(beneficiaryMeta, next.name)){
+    showToast(`There is already a beneficiary called ${next.name}`);
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try{
+    const patch = { programme: next.programme || null, cohort: next.cohort || null };
+    if(renamed) patch.name = next.name;
+
+    // The foreign keys cascade a rename through every child table.
+    const { error } = await db.from('beneficiaries').update(patch).eq('name', profEditOriginal.name);
+    if(error) throw error;
+
+    // Invites are not linked by foreign key, so bring them along by hand.
+    const { error: invErr } = await db.from('beneficiary_invites')
+      .update({ name: next.name, programme: next.programme || null, cohort: next.cohort || null })
+      .eq('name', profEditOriginal.name);
+    if(invErr) console.error('Beneficiary updated, but their invite record did not follow', invErr);
+
+    showToast(renamed && moved ? 'Renamed and moved'
+            : renamed ? `Renamed to ${next.name}`
+            : 'Moved to the new cohort');
+
+    await loadBeneficiaryList();
+    const sel = document.getElementById('profileBeneficiarySelect');
+    populateSelect('profileBeneficiarySelect', Object.keys(beneficiaryMeta).sort());
+    sel.value = next.name;
+    await renderProfile();
+  }catch(e){
+    console.error('Could not save the beneficiary', e);
+    showToast(`Could not save: ${e.message || 'please try again'}`);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Save changes';
+  }
+}
+
+async function profToggleArchive(){
+  if(!profEditOriginal) return;
+  const name = profEditOriginal.name;
+  const nowArchived = !(beneficiaryMeta[name] || {}).archived;
+  try{
+    const { error } = await db.from('beneficiaries').update({ archived: nowArchived }).eq('name', name);
+    if(error) throw error;
+    showToast(nowArchived
+      ? `${name} archived — kept on file, left out of the statistics`
+      : `${name} restored`);
+    await loadBeneficiaryList();
+    await renderProfile();
+  }catch(e){
+    console.error('Could not change the archive state', e);
+    showToast(`Could not archive: ${e.message || 'please try again'}`);
+  }
+}
+
+async function profRemoveBeneficiary(){
+  if(!profEditOriginal) return;
+  const name = profEditOriginal.name;
+  const btn = document.getElementById('profRemoveConfirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Removing…';
+  try{
+    const { data: { session } } = await sbClient.auth.getSession();
+    if(!session) throw new Error('You need to be signed in');
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/remove-beneficiary`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    });
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.error || 'Could not remove this beneficiary');
+    showToast(`${name} removed, along with their login`);
+    await loadBeneficiaryList();
+    const names = Object.keys(beneficiaryMeta).sort();
+    populateSelect('profileBeneficiarySelect', names);
+    await renderProfile();
+  }catch(e){
+    console.error('Could not remove the beneficiary', e);
+    showToast(`Could not remove: ${e.message || 'please try again'}`);
+    btn.disabled = false;
+    btn.textContent = 'Remove permanently';
+  }
+}
+
+function wireProfileEditPanel(){
+  ['profEditName','profEditProgramme','profEditCohort'].forEach(id =>
+    document.getElementById(id).addEventListener('input', profRenderImpact));
+
+  document.getElementById('profSaveBtn').addEventListener('click', profSaveEdits);
+  document.getElementById('profRevertBtn').addEventListener('click', () => {
+    if(profEditOriginal) profFillEditPanel(profEditOriginal.name);
+  });
+  document.getElementById('profArchiveBtn').addEventListener('click', profToggleArchive);
+
+  document.getElementById('profRemoveBtn').addEventListener('click', () => {
+    if(!profEditOriginal) return;
+    document.getElementById('profRemoveName').textContent = profEditOriginal.name;
+    document.getElementById('profRemovePanel').style.display = 'block';
+    document.getElementById('profRemoveConfirm').focus();
+  });
+  document.getElementById('profRemoveCancelBtn').addEventListener('click', () => {
+    document.getElementById('profRemovePanel').style.display = 'none';
+    document.getElementById('profRemoveConfirm').value = '';
+    document.getElementById('profRemoveConfirmBtn').disabled = true;
+  });
+  document.getElementById('profRemoveConfirm').addEventListener('input', (e) => {
+    const typed = e.target.value.trim();
+    document.getElementById('profRemoveConfirmBtn').disabled =
+      !profEditOriginal || typed !== profEditOriginal.name;
+  });
+  document.getElementById('profRemoveConfirmBtn').addEventListener('click', profRemoveBeneficiary);
+}
+
 /* ======================= OVERVIEW REPORT =======================
    Admin-facing completion reporting on the Dashboard: who has done
    what, per stage, filtered by programme and cohort. The "is it open
@@ -2900,7 +3215,7 @@ function ovrIsoLocal(value){
 
 async function loadOverviewData(){
   const [bens, demos, surveys, cohorts] = await Promise.all([
-    db.from('beneficiaries').select('name,programme,cohort,is_check,created_at').order('name'),
+    db.from('beneficiaries').select('name,programme,cohort,is_check,archived,created_at').order('name'),
     db.from('enterprise_demographics').select('beneficiary,saved_at'),
     db.from('enterprise_survey_responses').select('beneficiary,period,saved_at'),
     db.from('cohort_settings').select('*'),
@@ -2963,7 +3278,7 @@ function ovrPeople(){
   const cohort = document.getElementById('ovrCohort').value;
   const includeCheck = document.getElementById('ovrIncludeCheck').checked;
   return ovrData.people.filter(b =>
-    (includeCheck || !b.is_check) &&
+    (includeCheck || (!b.is_check && !b.archived)) &&
     (!programme || b.programme === programme) &&
     (!cohort || b.cohort === cohort));
 }
@@ -3025,7 +3340,8 @@ function ovrMatrixHtml(){
       return `<td class="stage"><span class="ovr-blocked" title="Waiting on the previous stage">—</span></td>`;
     }).join('');
 
-    const tag = ben.is_check ? ' <span class="chip chip-grey">check</span>' : '';
+    const tag = ben.archived ? ' <span class="chip chip-grey">archived</span>'
+              : ben.is_check ? ' <span class="chip chip-grey">check</span>' : '';
     return `<tr>
       <td class="who">${escapeHtml(ben.name)}${tag}</td>
       <td class="meta">${escapeHtml(ben.programme || '—')}</td>
@@ -3765,13 +4081,17 @@ function isDemoComplete(d){
   return Object.values(d).filter(demoAnswered).length >= 5;
 }
 let checkNames = new Set();      // internal "check" participants — excluded from all statistics
+let archivedNames = new Set();   // beneficiaries taken off the programme — data kept, left out of statistics
 let programmeSettingsRows = {};  // full programme_settings rows by programme (host org + survey open dates)
 let programmeHostOrg = {};       // { programme: host organisation name }
 let currentHostOrg = 'Angels Resource Centres';
 const DOC_BUCKET = 'beneficiary-documents';
 
 function nameSlug(n){ return String(n||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,''); }
-function benLabel(n){ return checkNames.has(n) ? n + ' (check)' : n; }
+function benLabel(n){
+  if(archivedNames.has(n)) return n + ' (archived)';
+  return checkNames.has(n) ? n + ' (check)' : n;
+}
 
 async function loadProgrammeSettings(){
   programmeHostOrg = {};
@@ -4526,7 +4846,8 @@ async function renderProfile(){
   populateSelect('profileBeneficiarySelect', list);
   const name = document.getElementById('profileBeneficiarySelect').value;
   if(!name) return;
-  document.getElementById('profileIsCheck').checked = checkNames.has(name);
+  document.getElementById('profileIsCheck').checked = !!(beneficiaryMeta[name] || {}).is_check;
+  profFillEditPanel(name);
 
   const recs = {};
   for(const p of PERIOD_ORDER){
@@ -5647,6 +5968,7 @@ function bindStaticEventListeners(){
   document.getElementById('cohortInput').addEventListener('input', renderSponsorHint);
 
   document.getElementById('profileBeneficiarySelect').addEventListener('change', renderProfile);
+  wireProfileEditPanel();
   document.getElementById('profileIsCheck').addEventListener('change', async (e) => {
     const name = document.getElementById('profileBeneficiarySelect').value;
     if(!name) return;
@@ -5748,8 +6070,20 @@ async function loadAppData(){
 // If we see that, we must wait for the PASSWORD_RECOVERY auth event and
 // show the "set a new password" panel instead of treating the session
 // getSession() finds as a normal login and dropping the user into the app.
+// Supabase sends people back to the site with a one-time token in the URL:
+//   type=recovery — they used "Forgot password?"
+//   type=invite   — an administrator invited them from the Supabase dashboard
+//   type=signup   — they are confirming their email address
+// In all three cases the person has a valid session but no password they
+// know, so all three have to land on the set-a-password panel instead of
+// being dropped straight into the app with no way back in next time.
+function authLinkType(){
+  const src = `${window.location.hash} ${window.location.search}`;
+  const m = /[#&?]type=(recovery|invite|signup)/.exec(src);
+  return m ? m[1] : null;
+}
 function isPasswordRecoveryLink(){
-  return /type=recovery/.test(window.location.hash) || /type=recovery/.test(window.location.search);
+  return authLinkType() !== null;
 }
 
 async function init(){
@@ -5758,8 +6092,20 @@ async function init(){
   bindStaticEventListeners();
   bindAuthUI();
 
-  if(isPasswordRecoveryLink()){
+  const linkType = authLinkType();
+  if(linkType){
     showLoginScreen();
+    if(linkType !== 'recovery'){
+      // A brand-new account, not a forgotten password.
+      const intro = document.getElementById('resetPanelIntro');
+      const l1 = document.getElementById('resetPassword1Label');
+      const l2 = document.getElementById('resetPassword2Label');
+      const btn = document.getElementById('resetSubmitBtn');
+      if(intro) intro.textContent = 'Welcome to CIMP. Choose a password to finish setting up your account — you will sign in with your email address and this password from now on.';
+      if(l1) l1.textContent = 'Choose a password';
+      if(l2) l2.textContent = 'Confirm password';
+      if(btn) btn.textContent = 'Create password & continue';
+    }
     showAuthPanel('reset');
   } else {
     const { data: { session } } = await sbClient.auth.getSession();
