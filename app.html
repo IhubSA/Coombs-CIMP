@@ -5164,6 +5164,88 @@ async function populateCohortSelect(){
   if(keys.includes(prev)) sel.value = prev;
 }
 
+
+// Cohort reports used to walk every member one at a time, and each member
+// cost 17 sequential round trips (6 periods x 2 tables, 4 PEII quarters, the
+// intake). A ten-person cohort was therefore ~170 queries in series, which is
+// why a report took the best part of a minute — and why it ran twice, once to
+// show the stats and again to export them.
+//
+// This fetches the whole cohort in four queries and assembles the same
+// per-beneficiary objects in memory. The "admin record wins over the
+// self-reported one" rule is preserved exactly as loadAssessmentUnified had it.
+async function gatherCohortMemberData(members){
+  if(!members.length) return [];
+
+  const [assessments, surveys, peii, demos] = await Promise.all([
+    db.from('assessments').select('*').in('beneficiary', members),
+    db.from('enterprise_survey_responses').select('*').in('beneficiary', members),
+    db.from('peii_entries').select('*').in('beneficiary', members),
+    db.from('enterprise_demographics').select('*').in('beneficiary', members),
+  ]);
+  for(const r of [assessments, surveys, peii, demos]){
+    if(r.error) throw r.error;
+  }
+
+  const adminByKey = new Map();
+  (assessments.data || []).forEach(d => {
+    adminByKey.set(`${d.beneficiary}||${d.period}`, {
+      beneficiary: d.beneficiary, programme: d.programme, cohort: d.cohort,
+      period: d.period, scores: d.scores || {}, computedPct: d.computed_pct || undefined,
+      seeded: d.seeded, savedAt: d.saved_at, source: 'admin',
+    });
+  });
+
+  // Keep the most recent self-reported response per period.
+  const selfByKey = new Map();
+  (surveys.data || []).forEach(d => {
+    const key = `${d.beneficiary}||${d.period}`;
+    const existing = selfByKey.get(key);
+    if(existing && new Date(existing.savedAt) >= new Date(d.saved_at)) return;
+    selfByKey.set(key, {
+      beneficiary: d.beneficiary, period: d.period, scores: d.scores || {},
+      computedPct: undefined, seeded: false, savedAt: d.saved_at, source: 'self',
+    });
+  });
+
+  const peiiByBen = new Map();
+  (peii.data || []).forEach(d => {
+    const rec = {
+      beneficiary: d.beneficiary, quarter: d.quarter, dims: d.dims || {},
+      feedback: d.feedback || '', computedPct: d.computed_pct !== null ? d.computed_pct : undefined,
+      seeded: d.seeded, savedAt: d.saved_at,
+    };
+    if(!peiiByBen.has(d.beneficiary)) peiiByBen.set(d.beneficiary, []);
+    peiiByBen.get(d.beneficiary).push({ ...rec, pct: peiiPctForRecord(rec) });
+  });
+
+  const demoByBen = new Map();
+  (demos.data || []).forEach(d => demoByBen.set(d.beneficiary, { data: d.data || {}, savedAt: d.saved_at }));
+
+  return members.map(name => {
+    const recs = {};
+    PERIOD_ORDER.forEach(p => {
+      const rec = adminByKey.get(`${name}||${p}`) || selfByKey.get(`${name}||${p}`) || null;
+      if(rec) recs[p] = rec;
+    });
+    const periodsWithData = PERIOD_ORDER.filter(p => recs[p]);
+    const baseRec = recs['Baseline'];
+    const baseAii = baseRec ? computeAII(indexPctForRecord(baseRec,'ERI'), indexPctForRecord(baseRec,'BHI'), indexPctForRecord(baseRec,'SRI')) : null;
+    const latestP = periodsWithData.length ? periodsWithData[periodsWithData.length-1] : null;
+    const latestRec = latestP ? recs[latestP] : null;
+    const latestAii = latestRec ? computeAII(indexPctForRecord(latestRec,'ERI'), indexPctForRecord(latestRec,'BHI'), indexPctForRecord(latestRec,'SRI')) : null;
+    const growth = (baseAii!==null && latestAii!==null && latestP!=='Baseline') ? latestAii-baseAii : null;
+    const order = { Q1:1, Q2:2, Q3:3, Q4:4 };
+    const peiiRecs = (peiiByBen.get(name) || [])
+      .filter(r => order[r.quarter])
+      .sort((a,b) => order[a.quarter] - order[b.quarter]);
+    return {
+      name, recs, periodsWithData, baseAii, latestP, latestRec, latestAii, growth,
+      flag: riskFlagFor(latestAii, growth), peiiRecs, demo: demoByBen.get(name) || null,
+    };
+  });
+}
+
 async function gatherCohortData(key){
   const { programme, cohort } = splitCohortKey(key);
   await loadBeneficiaryList();
@@ -5171,8 +5253,7 @@ async function gatherCohortData(key){
     const m = beneficiaryMeta[n];
     return m.programme === programme && m.cohort === cohort && !checkNames.has(n);
   });
-  const perBen = [];
-  for(const n of members) perBen.push(await gatherBeneficiaryData(n));
+  const perBen = await gatherCohortMemberData(members);
 
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
   const periods = PERIOD_ORDER.map(p => {
@@ -5476,27 +5557,39 @@ function populateReportForm(rec){
   currentReportNumber = rec ? rec.reportNumber : null;
 }
 
+let reportContextSeq = 0;
+
 async function switchReportContext(){
+  const seq = ++reportContextSeq;
+  const stale = () => seq !== reportContextSeq;
   applyReportTypeUI();
   if(currentReportType === 'cohort'){
     await populateCohortSelect();
+    if(stale()) return;
     const key = document.getElementById('reportCohortSelect').value;
     if(!key){ ['statOverview','statDiagnostic','statGrowth','statPeii'].forEach(id => document.getElementById(id).innerHTML = 'No cohorts yet.'); populateReportSelect([]); populateReportForm(null); return; }
-    renderCohortStats(await gatherCohortData(key));
+    ['statOverview','statDiagnostic','statGrowth','statPeii'].forEach(id => document.getElementById(id).innerHTML = 'Loading…');
+    const data = await gatherCohortData(key);
+    if(stale()) return;
+    renderCohortStats(data);
     const hist = await loadCohortHistory(key);
+    if(stale()) return;
     populateReportSelect(hist);
     populateReportForm(hist.length ? hist[0] : null);
     return;
   }
   const list = await loadBeneficiaryList();
+  if(stale()) return;
   populateSelect('reportBeneficiarySelect', list);
   const name = document.getElementById('reportBeneficiarySelect').value;
   if(!name) return;
 
   const data = await gatherBeneficiaryData(name);
+  if(stale()) return;
   renderReportStats(data);
 
   const history = await loadNarrativeHistory(name);
+  if(stale()) return;
   populateReportSelect(history);
   populateReportForm(history.length ? history[0] : null);
 }
@@ -5504,12 +5597,14 @@ async function switchReportContext(){
 // Loads whichever report the admin picked from the "Report" dropdown —
 // either an existing dated report, or a blank "New report" slot.
 async function switchSelectedReport(){
+  const seq = ++reportContextSeq;
   const val = document.getElementById('reportSelect').value;
   if(val === '__new__'){
     populateReportForm(null);
     return;
   }
   const rec = currentReportType === 'cohort' ? await loadCohortReportById(val) : await loadNarrativeById(val);
+  if(seq !== reportContextSeq) return;
   populateReportForm(rec);
 }
 
