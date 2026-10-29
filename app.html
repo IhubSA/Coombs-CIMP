@@ -531,6 +531,16 @@
   .prof-impact ul{margin:6px 0 0; padding-left:20px;}
   .prof-impact li{margin:3px 0;}
   .prof-impact.none{background:var(--sage); color:var(--ink-soft);}
+  .prof-reset{
+    margin-top:14px; padding:13px 16px; border-radius:10px;
+    background:var(--green-bg); font-size:13px; line-height:1.6;
+  }
+  .prof-reset.warn{background:var(--yellow-bg);}
+  .prof-reset code{
+    display:block; margin:8px 0; padding:8px 10px; background:var(--paper);
+    border:1px solid var(--sage-line); border-radius:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; word-break:break-all;
+  }
   .prof-archived-flag{
     display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700;
     padding:4px 10px; border-radius:999px; background:var(--grey-bg); color:var(--grey); margin-left:8px;
@@ -906,9 +916,12 @@
         <button class="btn btn-primary btn-sm" type="button" id="profSaveBtn">Save changes</button>
         <button class="btn btn-ghost btn-sm" type="button" id="profRevertBtn">Undo my edits</button>
         <span class="prof-edit-spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="profResetPwBtn">Send password reset by SMS</button>
         <button class="btn btn-ghost btn-sm" type="button" id="profArchiveBtn">Archive</button>
         <button class="btn btn-ghost btn-sm prof-danger" type="button" id="profRemoveBtn">Remove from the system…</button>
       </div>
+
+      <div id="profResetResult"></div>
 
       <div id="profRemovePanel">
         <div class="prof-remove-title">Remove <span id="profRemoveName"></span> permanently?</div>
@@ -2997,6 +3010,7 @@ function profFillEditPanel(name){
   const archBtn = document.getElementById('profArchiveBtn');
   archBtn.textContent = archived ? 'Restore from archive' : 'Archive';
   document.getElementById('profRemovePanel').style.display = 'none';
+  document.getElementById('profResetResult').innerHTML = '';
   document.getElementById('profRemoveConfirm').value = '';
   document.getElementById('profRemoveConfirmBtn').disabled = true;
   profRenderImpact();
@@ -3096,6 +3110,59 @@ async function profSaveEdits(){
   }
 }
 
+// Beneficiaries sign in with a phone number against an internal email
+// address that receives no mail, so the ordinary "Forgot password?" can
+// never reach them. This asks the server for a one-time recovery link and
+// texts it to them. The link is shown here too, so it can be sent another
+// way if the SMS does not arrive.
+async function profSendPasswordReset(){
+  if(!profEditOriginal) return;
+  const name = profEditOriginal.name;
+  const btn = document.getElementById('profResetPwBtn');
+  const box = document.getElementById('profResetResult');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  box.innerHTML = '';
+  try{
+    const { data: { session } } = await sbClient.auth.getSession();
+    if(!session) throw new Error('You need to be signed in');
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/reset-beneficiary-password`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': SUPABASE_PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+    });
+    const body = await res.json();
+    if(!res.ok) throw new Error(body.error || 'Could not create a reset link');
+
+    const copyBtn = `<button class="btn btn-ghost btn-sm" type="button" onclick="navigator.clipboard.writeText('${jsAttr(body.link)}'); showToast('Reset link copied');">Copy link</button>`;
+    if(body.smsSent){
+      box.innerHTML = `<div class="prof-reset">
+        <b>Reset link sent to ${escapeHtml(body.phone || 'their number')}.</b><br>
+        ${escapeHtml(name)} can tap it to choose a new password. It works once and expires after about an hour —
+        send another if they do not get to it in time.
+        <code>${escapeHtml(body.link)}</code>${copyBtn}</div>`;
+      showToast(`Reset link sent to ${name}`);
+    } else {
+      box.innerHTML = `<div class="prof-reset warn">
+        <b>The link was created, but the SMS did not go out.</b><br>
+        ${body.smsError ? escapeHtml(body.smsError) : 'The SMS service did not accept the message.'}<br>
+        Send this link to ${escapeHtml(name)} another way — it works once and expires after about an hour.
+        <code>${escapeHtml(body.link)}</code>${copyBtn}</div>`;
+      showToast('Link created, but the SMS failed');
+    }
+  }catch(e){
+    console.error('Could not send a password reset', e);
+    box.innerHTML = `<div class="prof-reset warn">Could not send a reset: ${escapeHtml(e.message || 'please try again')}</div>`;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Send password reset by SMS';
+  }
+}
+
 async function profToggleArchive(){
   if(!profEditOriginal) return;
   const name = profEditOriginal.name;
@@ -3155,6 +3222,7 @@ function wireProfileEditPanel(){
   document.getElementById('profRevertBtn').addEventListener('click', () => {
     if(profEditOriginal) profFillEditPanel(profEditOriginal.name);
   });
+  document.getElementById('profResetPwBtn').addEventListener('click', profSendPasswordReset);
   document.getElementById('profArchiveBtn').addEventListener('click', profToggleArchive);
 
   document.getElementById('profRemoveBtn').addEventListener('click', () => {
