@@ -401,9 +401,11 @@
     text-decoration:underline; cursor:pointer; font-size:12.5px; font-family:'IBM Plex Sans',sans-serif;
   }
   .login-card .forgot-link button:hover{ color:var(--ink); }
-  #forgotPasswordPanel, #resetPasswordPanel{ display:none; }
+  #forgotPasswordPanel, #resetPasswordPanel, #smsCodePanel{ display:none; }
   #forgotSuccess, #resetSuccess{ color:var(--ink); background:var(--sage); border-radius:8px; padding:10px 12px; font-size:12.5px; margin-top:10px; display:none; text-align:center; }
-  #forgotError, #resetError{ color:var(--red); font-size:12.5px; margin-top:10px; text-align:center; display:none; }
+  #forgotError, #resetError, #smsCodeError{ color:var(--red); font-size:12.5px; margin-top:10px; text-align:center; display:none; }
+  #smsCodeValue{ letter-spacing:.42em; font-size:19px; text-align:center; font-weight:600; }
+  .back-to-signin .sep{ color:var(--ink-soft); margin:0 8px; font-size:12.5px; }
   .back-to-signin{ text-align:center; margin-top:12px; }
   .back-to-signin button{
     background:none; border:none; width:auto; margin:0; padding:0; color:var(--ink-soft);
@@ -612,17 +614,46 @@
 
     <div id="forgotPasswordPanel">
       <p class="sub" style="margin-bottom:16px;">Enter whatever you sign in with. Administrators get a link by email;
-        participants who sign in with a phone number get theirs by SMS.</p>
+        participants who sign in with a phone number get a six-digit code by SMS.</p>
       <form id="forgotPasswordForm">
         <div class="field">
           <label for="forgotEmail">Email or phone number</label>
           <input type="text" id="forgotEmail" autocomplete="username" required />
         </div>
-        <button type="submit" class="btn btn-primary" id="forgotSubmitBtn">Send reset link</button>
+        <button type="submit" class="btn btn-primary" id="forgotSubmitBtn">Send reset code</button>
         <div id="forgotError"></div>
         <div id="forgotSuccess"></div>
       </form>
-      <div class="back-to-signin"><button type="button" id="backToSignInBtn">Back to sign in</button></div>
+      <div class="back-to-signin">
+        <button type="button" id="haveCodeBtn">I already have a code</button>
+        <span class="sep">·</span>
+        <button type="button" id="backToSignInBtn">Back to sign in</button>
+      </div>
+    </div>
+
+    <!-- Participants get a six-digit code rather than a link: link scanners
+         along the SMS path were fetching the one-time recovery links and
+         using them up before the participant ever saw them. -->
+    <div id="smsCodePanel">
+      <p class="sub" style="margin-bottom:16px;">Enter the six-digit code we sent you by SMS, then choose your new password.</p>
+      <form id="smsCodeForm">
+        <div class="field">
+          <label for="smsCodePhone">Your phone number</label>
+          <input type="text" id="smsCodePhone" autocomplete="username" inputmode="tel" required />
+        </div>
+        <div class="field">
+          <label for="smsCodeValue">Six-digit code</label>
+          <input type="text" id="smsCodeValue" inputmode="numeric" autocomplete="one-time-code"
+                 pattern="[0-9]*" maxlength="6" required />
+        </div>
+        <button type="submit" class="btn btn-primary" id="smsCodeSubmitBtn">Continue</button>
+        <div id="smsCodeError"></div>
+      </form>
+      <div class="back-to-signin">
+        <button type="button" id="smsCodeResendBtn">Send me another code</button>
+        <span class="sep">·</span>
+        <button type="button" id="smsCodeBackBtn">Back to sign in</button>
+      </div>
     </div>
 
     <div id="resetPasswordPanel">
@@ -1376,7 +1407,15 @@ function showAuthPanel(which){
   document.getElementById('loginForm').style.display = which === 'signin' ? '' : 'none';
   document.getElementById('forgotPasswordPanel').style.display = which === 'forgot' ? 'block' : 'none';
   document.getElementById('resetPasswordPanel').style.display = which === 'reset' ? 'block' : 'none';
+  document.getElementById('smsCodePanel').style.display = which === 'smscode' ? 'block' : 'none';
 }
+
+// Set while a beneficiary is part-way through the code flow: they have a
+// valid session from verifyOtp but no password they know yet, so SIGNED_IN
+// must NOT drop them into the app — they have to finish choosing one first.
+// A recovery LINK announces itself in the URL; a verified code does not, so
+// this flag is how the auth listener tells the difference.
+let otpResetInProgress = false;
 
 async function updateUserBadge(){
   const { data: { user } } = await sbClient.auth.getUser();
@@ -1392,13 +1431,26 @@ async function updateUserBadge(){
 // redeem-invite Edge Function uses when creating the account. This lets
 // one login form serve both admins (real email) and beneficiaries (phone).
 function looksLikePhoneNumber(input){
-  return /^[+\d][\d\s\-()]{5,}$/.test(input);
+  // A leading "(" counts too — people do write (067) 054 3230.
+  return /^[+(\d][\d\s\-()]{5,}$/.test(input);
 }
 function phoneDigitsOnly(phone){
   return (phone || '').replace(/\D/g, '');
 }
+// Accounts are all created on the international form of the number
+// (beneficiary+2767...), because that is the form invites are sent on. People
+// type their number however they normally write it, though — 067 054 3230 as
+// often as +27 67 054 3230 — and the local form used to produce a different
+// address, so the sign-in simply said the details were wrong. Everything is
+// folded to the 27... form here, once, for sign-in and reset alike.
+function normalisePhoneDigits(phone){
+  let d = phoneDigitsOnly(phone);
+  if(d.startsWith('0')) d = '27' + d.slice(1);
+  else if(!d.startsWith('27') && d.length === 9) d = '27' + d;
+  return d;
+}
 function syntheticEmailForPhone(phone){
-  return `beneficiary+${phoneDigitsOnly(phone)}@cimp.lizellecoombs.internal`;
+  return `beneficiary+${normalisePhoneDigits(phone)}@cimp.lizellecoombs.internal`;
 }
 
 function bindAuthUI(){
@@ -1443,6 +1495,77 @@ function bindAuthUI(){
     showAuthPanel('signin');
   });
 
+  // For someone who closed the app after the SMS arrived and came back later.
+  document.getElementById('haveCodeBtn').addEventListener('click', () => {
+    const typed = document.getElementById('forgotEmail').value.trim()
+      || document.getElementById('loginEmail').value.trim();
+    if(looksLikePhoneNumber(typed)) document.getElementById('smsCodePhone').value = typed;
+    document.getElementById('smsCodeError').style.display = 'none';
+    showAuthPanel('smscode');
+    document.getElementById('smsCodeValue').focus();
+  });
+
+  document.getElementById('smsCodeBackBtn').addEventListener('click', () => {
+    showAuthPanel('signin');
+  });
+
+  document.getElementById('smsCodeResendBtn').addEventListener('click', () => {
+    const phone = document.getElementById('smsCodePhone').value.trim();
+    if(phone) document.getElementById('forgotEmail').value = phone;
+    document.getElementById('forgotError').style.display = 'none';
+    document.getElementById('forgotSuccess').style.display = 'none';
+    showAuthPanel('forgot');
+  });
+
+  // The code and the password are two steps of one job, so verifying the code
+  // leads straight into the existing "choose a password" panel rather than
+  // letting the new session fall through into the app.
+  document.getElementById('smsCodeForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const phone = document.getElementById('smsCodePhone').value.trim();
+    const token = document.getElementById('smsCodeValue').value.trim().replace(/\D/g, '');
+    const errorEl = document.getElementById('smsCodeError');
+    const submitBtn = document.getElementById('smsCodeSubmitBtn');
+    errorEl.style.display = 'none';
+
+    if(!looksLikePhoneNumber(phone)){
+      errorEl.textContent = 'Enter the phone number you sign in with, for example 082 123 4567.';
+      errorEl.style.display = 'block';
+      return;
+    }
+    if(token.length !== 6){
+      errorEl.textContent = 'The code is six digits.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Checking…';
+    otpResetInProgress = true;
+    try{
+      const { error } = await sbClient.auth.verifyOtp({
+        email: syntheticEmailForPhone(phone),
+        token,
+        type: 'recovery',
+      });
+      if(error) throw error;
+
+      const intro = document.getElementById('resetPanelIntro');
+      if(intro) intro.textContent = 'Code accepted. Choose a new password — you will sign in with your phone number and this password from now on.';
+      showAuthPanel('reset');
+      document.getElementById('resetPassword1').focus();
+    }catch(err){
+      otpResetInProgress = false;
+      errorEl.textContent = /expired|invalid|token/i.test(err.message || '')
+        ? 'That code is wrong or has expired. Ask for another one.'
+        : (err.message || 'Could not check that code — please try again.');
+      errorEl.style.display = 'block';
+    }finally{
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Continue';
+    }
+  });
+
   document.getElementById('forgotPasswordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const typed = document.getElementById('forgotEmail').value.trim();
@@ -1468,9 +1591,16 @@ function bindAuthUI(){
         });
         const payload = await res.json().catch(() => ({}));
         if(!res.ok) throw new Error(payload.error || 'Could not send the SMS — please try again.');
-        successEl.textContent = payload.message
-          || 'If that number belongs to a CIMP account, a reset link has been sent by SMS.';
-        successEl.style.display = 'block';
+        // Straight on to the code box, so there is nowhere to get lost between
+        // the SMS arriving and typing it in.
+        document.getElementById('smsCodePhone').value = typed;
+        document.getElementById('smsCodeValue').value = '';
+        document.getElementById('smsCodeError').textContent = '';
+        document.getElementById('smsCodeError').style.display = 'none';
+        showAuthPanel('smscode');
+        document.getElementById('smsCodeValue').focus();
+        showToast(payload.message
+          || 'If that number belongs to a CIMP account, a six-digit code has been sent by SMS.');
       } else {
         // redirectTo must be on the "Redirect URLs" allow-list in the
         // Supabase dashboard (Authentication → URL Configuration), or
@@ -1487,7 +1617,7 @@ function bindAuthUI(){
       errorEl.style.display = 'block';
     }finally{
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Send reset link';
+      submitBtn.textContent = 'Send reset code';
     }
   });
 
@@ -1516,6 +1646,7 @@ function bindAuthUI(){
     try{
       const { error } = await sbClient.auth.updateUser({ password: pw1 });
       if(error) throw error;
+      otpResetInProgress = false;
       successEl.style.display = 'block';
       // Clear the recovery token out of the URL and sign the user out so
       // they land back on a clean sign-in screen with their new password.
@@ -3202,21 +3333,24 @@ async function profSendPasswordReset(){
     const body = await res.json();
     if(!res.ok) throw new Error(body.error || 'Could not create a reset link');
 
-    const copyBtn = `<button class="btn btn-ghost btn-sm" type="button" onclick="navigator.clipboard.writeText('${jsAttr(body.link)}'); showToast('Reset link copied');">Copy link</button>`;
+    // A code, not a link: link scanners along the SMS path were opening the
+    // one-time recovery links and using them up before the participant could.
+    const copyBtn = `<button class="btn btn-ghost btn-sm" type="button" onclick="navigator.clipboard.writeText('${jsAttr(body.code)}'); showToast('Code copied');">Copy code</button>`;
     if(body.smsSent){
       box.innerHTML = `<div class="prof-reset">
-        <b>Reset link sent to ${escapeHtml(body.phone || 'their number')}.</b><br>
-        ${escapeHtml(name)} can tap it to choose a new password. It works once and expires after about an hour —
-        send another if they do not get to it in time.
-        <code>${escapeHtml(body.link)}</code>${copyBtn}</div>`;
-      showToast(`Reset link sent to ${name}`);
+        <b>Reset code sent to ${escapeHtml(body.phone || 'their number')}.</b><br>
+        ${escapeHtml(name)} enters it on the sign-in screen under “Forgot password?” → “I already have a code”,
+        then chooses a new password. It works once and expires after about an hour.<br>
+        If the SMS does not arrive you can read this code out to them:
+        <code>${escapeHtml(body.code)}</code>${copyBtn}</div>`;
+      showToast(`Reset code sent to ${name}`);
     } else {
       box.innerHTML = `<div class="prof-reset warn">
-        <b>The link was created, but the SMS did not go out.</b><br>
+        <b>The code was created, but the SMS did not go out.</b><br>
         ${body.smsError ? escapeHtml(body.smsError) : 'The SMS service did not accept the message.'}<br>
-        Send this link to ${escapeHtml(name)} another way — it works once and expires after about an hour.
-        <code>${escapeHtml(body.link)}</code>${copyBtn}</div>`;
-      showToast('Link created, but the SMS failed');
+        Read this code out to ${escapeHtml(name)} instead — it works once and expires after about an hour.
+        <code>${escapeHtml(body.code)}</code>${copyBtn}</div>`;
+      showToast('Code created, but the SMS failed');
     }
   }catch(e){
     console.error('Could not send a password reset', e);
@@ -6876,7 +7010,9 @@ async function init(){
       showAuthPanel('reset');
       return;
     }
-    if(event === 'SIGNED_IN' && !isPasswordRecoveryLink()){ enterApp(); }
+    // otpResetInProgress covers the SMS-code route, which produces a normal
+    // SIGNED_IN with nothing in the URL to mark it as a recovery.
+    if(event === 'SIGNED_IN' && !isPasswordRecoveryLink() && !otpResetInProgress){ enterApp(); }
     if(event === 'SIGNED_OUT'){ location.reload(); }
   });
 }
