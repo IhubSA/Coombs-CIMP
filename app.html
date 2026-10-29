@@ -5978,6 +5978,25 @@ async function generatePrintableReport(){
 }
 
 // Renders the report offscreen and rasterises it to a downloadable PDF with
+// REPORT_PRINT_CSS is written for a standalone document, so its rules start
+// with `body`, `header`, `table` and so on. Injected into the live page those
+// would restyle the admin's actual screen, so every selector is prefixed with
+// the capture container. `body` becomes the container itself, since there is
+// no <body> inside it.
+function scopeCssToSelector(css, scope){
+  return String(css)
+    .replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '')
+    .replace(/(^|\})\s*([^{}@]+?)\s*\{/g, (m, close, selectors) => {
+      const scoped = selectors.split(',').map(s => {
+        s = s.trim();
+        if(!s) return s;
+        if(s === 'body' || s === 'html') return scope;
+        return `${scope} ${s}`;
+      }).filter(Boolean).join(', ');
+      return `${close}${scoped}{`;
+    });
+}
+
 // html2pdf.js (loaded from CDN) — a direct one-click file rather than
 // relying on the browser's print-to-PDF dialog.
 async function downloadReportPdf(){
@@ -5986,26 +6005,59 @@ async function downloadReportPdf(){
   const { name, assessor, data } = ctx;
   if(typeof html2pdf === 'undefined'){ showToast('PDF export library did not load — check your connection and try again'); return; }
 
+  // Why the PDF came out blank: html2pdf wraps whatever element it is given
+  // and measures that wrapper. The element handed to it was position:fixed,
+  // and a positioned element is out of normal flow, so it contributed no
+  // height — html2canvas produced a 794x0 canvas and the PDF was an empty
+  // page. The report HTML was never at fault.
+  //
+  // So: an off-screen WRAPPER holds the positioning, and the element passed
+  // to html2pdf is a plain in-flow div inside it, which does have a height.
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:absolute; left:-10000px; top:0; width:760px; background:#fff;';
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed; left:-9999px; top:0; width:760px; background:#fff;';
-  container.innerHTML = `<style>${REPORT_PRINT_CSS}</style>${buildReportBodyHtml(name, assessor, data)}`;
-  document.body.appendChild(container);
+  container.className = 'cimp-pdf-scope';
+  container.style.cssText = 'width:760px; background:#fff;';
+  // The report stylesheet is written for a standalone document, so its rules
+  // start with `body`. Injected into the live page it restyled the real body,
+  // which flickered the admin's screen and threw the capture off centre.
+  // Scoping it to this container keeps it where it belongs.
+  // The report stylesheet's `body` rule carries `margin:40px auto` and
+  // `max-width:760px`. Scoped onto the capture box those centre it inside the
+  // wrapper and html2canvas then crops the left-hand edge off every line, so
+  // they are overridden back to a plain, full-width block.
+  container.innerHTML =
+    `<style>${scopeCssToSelector(REPORT_PRINT_CSS, '.cimp-pdf-scope')}
+     .cimp-pdf-scope{margin:0 !important; max-width:none !important; width:760px; padding:28px !important; box-sizing:border-box;}</style>`
+    + buildReportBodyHtml(name, assessor, data);
+  wrapper.appendChild(container);
+  document.body.appendChild(wrapper);
 
   showToast('Preparing PDF…');
   try{
+    if(!container.innerText.trim()) throw new Error('the report came out empty');
+
+    // Capturing before the logo and the fonts are ready also yields a blank page.
+    try{ if(document.fonts && document.fonts.ready) await document.fonts.ready; }catch(e){ /* older browsers */ }
+    await Promise.all([...container.querySelectorAll('img')].map(img =>
+      img.complete ? Promise.resolve() : new Promise(done => { img.onload = img.onerror = done; })));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    if(!container.offsetHeight) throw new Error('the report had no height to capture');
+
     await html2pdf().set({
       margin: 24,
       filename: reportExportFilename(name, 'pdf'),
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
       jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
     }).from(container).save();
   }catch(e){
     console.error('PDF export failed', e);
-    showToast('Could not generate the PDF — please try again');
+    showToast(`Could not generate the PDF: ${e.message || 'please try again'}. Download Word instead if this persists.`);
   }finally{
-    container.remove();
+    wrapper.remove();
   }
 }
 
