@@ -611,15 +611,16 @@
     </form>
 
     <div id="forgotPasswordPanel">
-      <p class="sub" style="margin-bottom:16px;">Enter your email and we'll send you a link to reset your password.</p>
+      <p class="sub" style="margin-bottom:16px;">Enter whatever you sign in with. Administrators get a link by email;
+        participants who sign in with a phone number get theirs by SMS.</p>
       <form id="forgotPasswordForm">
         <div class="field">
-          <label for="forgotEmail">Email</label>
-          <input type="email" id="forgotEmail" autocomplete="username" required />
+          <label for="forgotEmail">Email or phone number</label>
+          <input type="text" id="forgotEmail" autocomplete="username" required />
         </div>
         <button type="submit" class="btn btn-primary" id="forgotSubmitBtn">Send reset link</button>
         <div id="forgotError"></div>
-        <div id="forgotSuccess">If that email has an account, a reset link is on its way. Check your inbox (and spam folder).</div>
+        <div id="forgotSuccess"></div>
       </form>
       <div class="back-to-signin"><button type="button" id="backToSignInBtn">Back to sign in</button></div>
     </div>
@@ -1051,6 +1052,22 @@
         <label for="reportAssessorInput">Assessor name</label>
         <input id="reportAssessorInput" type="text" placeholder="Your name" />
       </div>
+      <div class="field rp-cover-field">
+        <label for="reportCredentialsInput">Your credentials</label>
+        <input id="reportCredentialsInput" type="text" placeholder="e.g. Social Anthropologist | MSc Candidate" />
+      </div>
+      <div class="field rp-cover-field">
+        <label for="reportPreparedForInput">Prepared for</label>
+        <input id="reportPreparedForInput" type="text" placeholder="Client's full name" />
+      </div>
+      <div class="field rp-cover-field">
+        <label for="reportTitleInput">Report title</label>
+        <input id="reportTitleInput" type="text" placeholder="Monitoring, Evaluation and Learning" />
+      </div>
+      <div class="field rp-cover-field">
+        <label for="reportSubtitleInput">Subtitle</label>
+        <input id="reportSubtitleInput" type="text" placeholder="Baseline &amp; Demographic Intake Report" />
+      </div>
       <button class="btn btn-sm" type="button" id="reportNewBtn">New report</button>
       <button class="btn btn-sm" id="reportPrintBtn">Print</button>
       <button class="btn btn-gold btn-sm" id="reportPdfBtn">Download PDF</button>
@@ -1428,7 +1445,7 @@ function bindAuthUI(){
 
   document.getElementById('forgotPasswordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('forgotEmail').value.trim();
+    const typed = document.getElementById('forgotEmail').value.trim();
     const errorEl = document.getElementById('forgotError');
     const successEl = document.getElementById('forgotSuccess');
     const submitBtn = document.getElementById('forgotSubmitBtn');
@@ -1437,14 +1454,34 @@ function bindAuthUI(){
     submitBtn.disabled = true;
     submitBtn.textContent = 'Sending…';
     try{
-      // redirectTo must be on the "Redirect URLs" allow-list in the
-      // Supabase dashboard (Authentication → URL Configuration), or
-      // Supabase will silently fall back to the project's Site URL.
-      const { error } = await sbClient.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + window.location.pathname
-      });
-      if(error) throw error;
-      successEl.style.display = 'block';
+      // Beneficiaries sign in with a phone number and their account sits on an
+      // internal address that receives no mail, so emailing them a reset link
+      // can never work — it has to go by SMS. Which of the two it is comes
+      // down to what they typed in.
+      // Deliberately the same test the sign-in form uses, so a number that
+      // signs in as a phone also resets as one.
+      if(looksLikePhoneNumber(typed)){
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/request-beneficiary-reset`, {
+          method: 'POST',
+          headers: { 'apikey': SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: typed }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if(!res.ok) throw new Error(payload.error || 'Could not send the SMS — please try again.');
+        successEl.textContent = payload.message
+          || 'If that number belongs to a CIMP account, a reset link has been sent by SMS.';
+        successEl.style.display = 'block';
+      } else {
+        // redirectTo must be on the "Redirect URLs" allow-list in the
+        // Supabase dashboard (Authentication → URL Configuration), or
+        // Supabase will silently fall back to the project's Site URL.
+        const { error } = await sbClient.auth.resetPasswordForEmail(typed, {
+          redirectTo: window.location.origin + window.location.pathname
+        });
+        if(error) throw error;
+        successEl.textContent = 'If that email has an account, a reset link is on its way. Check your inbox (and spam folder).';
+        successEl.style.display = 'block';
+      }
     }catch(err){
       errorEl.textContent = err.message || 'Could not send reset link — please try again.';
       errorEl.style.display = 'block';
@@ -2534,7 +2571,7 @@ async function loadSponsors(){
     if(error) throw error;
     return (data || []).map(row => ({
       id: row.id, name: row.name, contact: row.contact || '', email: row.email || '',
-      notes: row.notes || '', createdAt: row.created_at,
+      notes: row.notes || '', createdAt: row.created_at, logoDataUri: row.logo_data_uri || null,
     }));
   }catch(e){ console.error('Failed to load sponsors', e); return []; }
 }
@@ -2779,9 +2816,23 @@ async function renderProgrammeSettings(){
       <div class="invite-meta"><b>${escapeHtml(pn)}</b></div>
       <div class="invite-row-actions">
         <input type="text" data-prog="${escapeHtml(pn)}" value="${escapeHtml(programmeHostOrg[pn] || '')}" placeholder="Angels Resource Centres (default)" style="min-width:220px;" />
+        ${(programmeSettingsRows[pn] || {}).logo_data_uri
+          ? `<img src="${(programmeSettingsRows[pn] || {}).logo_data_uri}" alt="" style="height:30px; background:#fff; border:1px solid var(--sage-line); border-radius:4px; padding:2px;">`
+          : ''}
+        <button class="btn btn-ghost btn-sm" type="button" data-prog-logo="${escapeHtml(pn)}">${(programmeSettingsRows[pn] || {}).logo_data_uri ? 'Replace logo' : 'Add logo'}</button>
         <button class="btn btn-primary btn-sm" type="button" data-prog-save="${escapeHtml(pn)}">Save</button>
       </div>
     </div>`).join('');
+  area.querySelectorAll('[data-prog-logo]').forEach(btn => btn.addEventListener('click', () => {
+    const pn = btn.getAttribute('data-prog-logo');
+    rpPickLogo(600, async (dataUri) => {
+      const { error } = await db.from('programme_settings')
+        .upsert({ programme: pn, logo_data_uri: dataUri, updated_at: new Date().toISOString() }, { onConflict: 'programme' });
+      if(error){ console.error(error); showToast('Could not save the logo — please try again'); return; }
+      showToast(`Logo saved for ${pn}`);
+      renderProgrammeSettings();
+    });
+  }));
   area.querySelectorAll('[data-prog-save]').forEach(btn => btn.addEventListener('click', async () => {
     const pn = btn.getAttribute('data-prog-save');
     const val = Array.from(area.querySelectorAll('[data-prog]')).find(i => i.getAttribute('data-prog') === pn).value.trim();
@@ -2889,11 +2940,24 @@ async function renderSponsorPortal(){
           <div class="sponsor-contact">${[s.contact, s.email].filter(Boolean).join(' · ') || 'No contact details on file'}</div>
           ${pills}
           ${s.notes ? `<div class="sponsor-notes">${s.notes}</div>` : ''}
+          ${s.logoDataUri ? `<div style="margin:8px 0;"><img src="${s.logoDataUri}" alt="" style="max-height:44px; max-width:170px; background:#fff; border:1px solid var(--sage-line); border-radius:4px; padding:3px;"></div>` : ''}
           <div class="sponsor-card-actions">
+            <button class="btn btn-ghost btn-sm" data-sponsor-logo="${s.id}">${s.logoDataUri ? 'Replace logo' : 'Add logo'}</button>
             <button class="btn btn-ghost btn-sm" data-delete-sponsor="${s.id}">Remove sponsor</button>
           </div>
         </div>`;
     }).join('');
+    grid.querySelectorAll('[data-sponsor-logo]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-sponsor-logo');
+        rpPickLogo(700, async (dataUri) => {
+          const { error } = await db.from('sponsors').update({ logo_data_uri: dataUri }).eq('id', id);
+          if(error){ console.error(error); showToast('Could not save the logo — please try again'); return; }
+          showToast('Client logo saved');
+          renderSponsorPortal();
+        });
+      });
+    });
     grid.querySelectorAll('[data-delete-sponsor]').forEach(btn => {
       btn.addEventListener('click', () => deleteSponsor(btn.getAttribute('data-delete-sponsor')));
     });
@@ -5202,6 +5266,7 @@ function applyReportTypeUI(){
   const isCohort = currentReportType === 'cohort';
   document.getElementById('reportBeneficiaryField').style.display = isCohort ? 'none' : '';
   document.getElementById('reportCohortField').style.display = isCohort ? '' : 'none';
+  [...document.querySelectorAll('.rp-cover-field')].forEach(el => { el.style.display = isCohort ? '' : 'none'; });
   const ui = REPORT_UI[currentReportType];
   ui.titles.forEach((t,i) => { document.getElementById('rsTitle'+(i+1)).textContent = t; });
   ['narrOverview','narrDiagnostic','narrGrowth','narrPeii','narrOverall'].forEach((id,i) => { document.getElementById(id).placeholder = ui.ph[i]; });
@@ -5362,7 +5427,13 @@ async function gatherCohortData(key){
   const sponsors = await loadSponsors();
   const sp = sponsors.find(x => x.id === map[key]);
 
+  await loadProgrammeSettings();
+  const progRow = programmeSettingsRows[programme] || {};
+
   return { isCohort: true, key, programme, cohort, sponsor: sp ? sp.name : null,
+    hostOrg: progRow.host_org || null,
+    clientLogo: sp ? sp.logoDataUri : null,
+    implementerLogo: progRow.logo_data_uri || null,
     memberCount: members.length, periods, latest, base, growth, rows, flagCounts, rag, peiiByQ,
     gender: tally(d => d.gender), stage: tally(d => d.business_category), industry: tally(d => d.industry), demoCount };
 }
@@ -5394,42 +5465,351 @@ function renderCohortStats(d){
     <tbody>${d.peiiByQ.map(x => `<tr><td>${x.quarter}</td><td>${x.n}</td><td>${pctTxt(x.pct)}</td><td><span class="chip ${PEII_RATING_CLS[ratingForPEII(x.pct)]}">${ratingForPEII(x.pct)}</span></td></tr>`).join('')}</tbody></table>` : 'No PEII entries on record for this cohort yet.';
 }
 
-function buildCohortReportBodyHtml(name, assessor, d){
-  const logoSrc = document.querySelector('.emblem img').src;
-  const dateTxt = formatReportDate(document.getElementById('reportDateInput').value) || new Date().toLocaleDateString();
-  const tbl = (head, rowsHtml) => `<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
-  const diag = d.periods.length ? tbl(['Period','Assessed','ERI','BHI','SRI','AII','RAG'],
-    d.periods.map(x => `<tr><td>${x.period}</td><td>${x.n}</td><td>${pctTxt(x.eri)}</td><td>${pctTxt(x.bhi)}</td><td>${pctTxt(x.sri)}</td><td>${pctTxt(x.aii)}</td><td>${ragFor(x.aii).label}</td></tr>`).join('')) : '<p class="np">No diagnostic scores on record.</p>';
-  const people = d.rows.length ? tbl(['Beneficiary','Latest period','AII','Growth','Risk flag'],
-    d.rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${r.latestP||'—'}</td><td>${pctTxt(r.aii)}</td><td>${r.growth!==null ? (r.growth>=0?'+':'')+r.growth.toFixed(1)+' pp' : '—'}</td><td>${r.flag}</td></tr>`).join('')) : '';
-  const peii = d.peiiByQ.length ? tbl(['Quarter','Responses','Average PEII','Rating'],
-    d.peiiByQ.map(x => `<tr><td>${x.quarter}</td><td>${x.n}</td><td>${pctTxt(x.pct)}</td><td>${ratingForPEII(x.pct)}</td></tr>`).join('')) : '<p class="np">No PEII entries on record.</p>';
-  const flags = Object.entries(d.flagCounts).map(([f,n]) => `${f}: ${n}`).join(' · ') || '—';
+// Report logos are stored as data URIs on the client and the programme. They
+// are downscaled here first: a 2 MB photo of a logo would bloat every row it
+// is saved on and slow the report down, and nothing in the report renders it
+// larger than a few hundred pixels anyway.
+function rpReadLogoFile(file, maxWidth){
+  return new Promise((resolve, reject) => {
+    if(!/^image\//.test(file.type)) return reject(new Error('That is not an image file'));
+    if(file.size > 8 * 1024 * 1024) return reject(new Error('That image is over 8 MB — please use a smaller one'));
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read that image'));
+      img.onload = () => {
+        const scale = Math.min(1, (maxWidth || 600) / img.width);
+        const w = Math.round(img.width * scale), hgt = Math.round(img.height * scale);
+        const c = document.createElement('canvas');
+        c.width = w; c.height = hgt;
+        const ctx = c.getContext('2d');
+        // A white backdrop keeps transparent PNGs from turning black in Word.
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, hgt);
+        ctx.drawImage(img, 0, 0, w, hgt);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// One file picker, shared by the client and programme logo buttons.
+function rpPickLogo(maxWidth, onDone){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if(!file) return;
+    try{
+      showToast('Processing logo…');
+      onDone(await rpReadLogoFile(file, maxWidth));
+    }catch(e){
+      console.error('Logo upload failed', e);
+      showToast(e.message || 'Could not use that image');
+    }
+  });
+  input.click();
+}
+
+/* ================= REPORT GRAPHICS =================
+   Charts for the client/cohort report. They are drawn onto a canvas and
+   embedded as PNG data URIs rather than inline SVG, because the same markup
+   has to survive three very different renderers: html2canvas for the PDF,
+   Word for the .doc export, and the browser's print engine. Word in
+   particular ignores inline SVG, and none of them handle conic-gradients.
+   Bars stay as HTML tables, which Word does render faithfully. */
+
+const RP = {
+  teal:'#188490', amber:'#E4B448', track:'#E4F0F0', ink:'#183048',
+  muted:'#6C6C6C', tealSoft:'#78A8B4', rule:'#D8E3E6',
+};
+
+// Gauge colour follows the RAG band, so the headline figure reads the same
+// way as the rating beside it.
+function rpRagColour(pct){
+  if(pct === null || pct === undefined) return '#9AA5AD';
+  if(pct >= 80) return '#1E8A5F';
+  if(pct >= 60) return RP.amber;
+  if(pct >= 40) return '#D98032';
+  return '#B5453C';
+}
+
+function rpCanvas(size){
+  const c = document.createElement('canvas');
+  const dpr = 3; // the PDF is captured at 2x, so draw above that to stay crisp
+  c.width = size * dpr; c.height = size * dpr;
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { c, ctx };
+}
+
+// A ring split into segments. One segment with a remainder gives a gauge;
+// several give a breakdown such as gender.
+function rpDonutPng(segments, opts){
+  const o = Object.assign({ size:150, thickness:26, centre:'', centreSub:'', centreSize:26 }, opts || {});
+  const { c, ctx } = rpCanvas(o.size);
+  const r = o.size / 2, inner = r - o.thickness;
+  const total = segments.reduce((s, x) => s + (x.value || 0), 0) || 1;
+
+  ctx.beginPath(); ctx.arc(r, r, r - 1, 0, Math.PI * 2);
+  ctx.strokeStyle = RP.track; ctx.lineWidth = o.thickness; ctx.stroke();
+
+  let a = -Math.PI / 2;
+  segments.forEach(seg => {
+    if(!seg.value) return;
+    const sweep = (seg.value / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(r, r, r - o.thickness / 2, a, a + sweep);
+    ctx.strokeStyle = seg.color; ctx.lineWidth = o.thickness; ctx.lineCap = 'butt';
+    ctx.stroke();
+    a += sweep;
+  });
+
+  if(o.centre){
+    ctx.fillStyle = RP.ink;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${o.centreSize}px Georgia, 'Times New Roman', serif`;
+    ctx.fillText(o.centre, r, r - (o.centreSub ? 7 : 0));
+    if(o.centreSub){
+      ctx.fillStyle = RP.muted;
+      ctx.font = `600 9px Arial, sans-serif`;
+      ctx.fillText(o.centreSub, r, r + 13);
+    }
+  }
+  return c.toDataURL('image/png');
+}
+
+function rpPct(n, total){ return total ? Math.round(n / total * 100) : 0; }
+
+// Bars as nested tables: the only construction that keeps its proportions in
+// Word, the PDF screenshot and print alike.
+function rpBarRows(entries, total, colourFor){
+  if(!entries.length) return `<tr><td class="rp-bar-empty">No data recorded.</td></tr>`;
+  return entries.map(([label, count], i) => {
+    const pct = rpPct(count, total);
+    const colour = colourFor ? colourFor(i, label) : (i === 0 ? RP.teal : RP.tealSoft);
+    return `<tr>
+      <td class="rp-bar-label">${escapeHtml(String(label))}</td>
+      <td class="rp-bar-cell">
+        <table class="rp-bar-track"><tr>
+          <td class="rp-bar-fill" width="${pct}%" style="background:${colour}; width:${pct}%;">&nbsp;</td>
+          <td class="rp-bar-rest">&nbsp;</td>
+        </tr></table>
+      </td>
+      <td class="rp-bar-num">${count}&nbsp;&nbsp;(${pct}%)</td>
+    </tr>`;
+  }).join('');
+}
+
+// The cohort profile panel that opens section 1.
+function rpCohortDashboard(d){
+  const latest = d.latest;
+  const aii = latest ? latest.aii : null;
+  const assessed = latest ? latest.n : 0;
+  const total = d.memberCount || 0;
+  const coverage = rpPct(assessed, total);
+  const rag = ragFor(aii).label;
+
+  const gauge = rpDonutPng(
+    [{ value: aii === null ? 0 : aii, color: rpRagColour(aii) },
+     { value: aii === null ? 100 : 100 - aii, color: 'rgba(0,0,0,0)' }],
+    { size:150, thickness:24, centre: aii === null ? '—' : aii.toFixed(1) + '%',
+      centreSub: `${rag.toUpperCase()} · ${latest ? latest.period.toUpperCase() : 'NO DATA'}`, centreSize:25 });
+
+  const genderEntries = d.gender || [];
+  const genderTotal = genderEntries.reduce((s, [, n]) => s + n, 0);
+  const genderColours = [RP.teal, RP.amber, RP.tealSoft, '#B9CED2'];
+  const genderPng = genderTotal ? rpDonutPng(
+    genderEntries.map(([, n], i) => ({ value:n, color: genderColours[i % genderColours.length] })),
+    { size:120, thickness:30 }) : null;
+  const genderLegend = genderEntries.map(([label, n], i) => `
+    <tr><td class="rp-dot" style="color:${genderColours[i % genderColours.length]};">&#9679;</td>
+        <td class="rp-legend-label">${escapeHtml(label)}<br><span class="rp-legend-num">${n} &middot; ${rpPct(n, genderTotal)}%</span></td></tr>`).join('');
+
+  const eyebrow = [d.programme, d.cohort].filter(Boolean).map(s => escapeHtml(String(s).toUpperCase())).join('&nbsp; |&nbsp; ');
+
   return `
-    <header><img src="${logoSrc}" alt="logo"><div><h1>Client / Cohort Impact Report${currentReportNumber?' — Report #'+currentReportNumber:''}</h1><div class="meta">${escapeHtml(d.programme)} — ${escapeHtml(d.cohort)}${d.sponsor ? ' · Client: '+escapeHtml(d.sponsor) : ''} · Prepared by ${escapeHtml(assessor)||'—'} · Report date: ${dateTxt}</div></div></header>
+  <div class="rp-card">
+    <div class="rp-card-eyebrow">${eyebrow}</div>
+    <div class="rp-card-title">Baseline Cohort Profile</div>
+    <div class="rp-card-sub">CIMP&trade; &middot; ${latest ? escapeHtml(latest.period) : 'No assessment'} &middot; ${total} participant${total === 1 ? '' : 's'}</div>
+
+    <table class="rp-tiles"><tr>
+      <td class="rp-tile">
+        <div class="rp-tile-head">Cohort AII&nbsp; |&nbsp; ${latest ? escapeHtml(latest.period) : '—'}</div>
+        <div class="rp-tile-body"><img src="${gauge}" width="150" height="150" alt="Cohort AII ${aii === null ? 'not available' : aii.toFixed(1) + ' percent'}"></div>
+        <div class="rp-tile-foot">Initial reference point for this phase</div>
+      </td>
+      <td class="rp-tile">
+        <div class="rp-tile-head">Assessment coverage</div>
+        <div class="rp-tile-body">
+          <div class="rp-big">${assessed} / ${total}</div>
+          <div class="rp-big-sub">${coverage}% assessed</div>
+          <table class="rp-bar-track rp-cov"><tr>
+            <td class="rp-bar-fill" width="${coverage}%" style="background:${RP.teal}; width:${coverage}%;">&nbsp;</td>
+            <td class="rp-bar-rest">&nbsp;</td>
+          </tr></table>
+        </div>
+        <div class="rp-tile-foot">Latest assessment: ${latest ? escapeHtml(latest.period) : '—'}</div>
+      </td>
+      <td class="rp-tile">
+        <div class="rp-tile-head">Gender</div>
+        <div class="rp-tile-body">
+          ${genderPng ? `<table class="rp-gender"><tr>
+            <td><img src="${genderPng}" width="120" height="120" alt="Gender split"></td>
+            <td><table class="rp-legend">${genderLegend}</table></td>
+          </tr></table>` : `<div class="rp-none">No intake on record</div>`}
+        </div>
+        <div class="rp-tile-foot">&nbsp;</div>
+      </td>
+    </tr></table>
+
+    <table class="rp-panels"><tr>
+      <td class="rp-panel">
+        <div class="rp-panel-head">Business stage</div>
+        <table class="rp-bars">${rpBarRows(d.stage || [], d.demoCount || 0)}</table>
+      </td>
+      <td class="rp-panel">
+        <div class="rp-panel-head">Industry representation</div>
+        <table class="rp-bars">${rpBarRows(d.industry || [], d.demoCount || 0,
+          (i) => [RP.teal, RP.tealSoft, RP.amber, '#B9CED2'][i % 4])}</table>
+      </td>
+    </tr></table>
+
+    <div class="rp-card-source">Source: CIMP&trade; cohort diagnostic &nbsp;|&nbsp; Descriptive counts: n = ${d.demoCount || 0}</div>
+  </div>`;
+}
+
+// The five CIMP measures, spelled out on page 2 exactly as the client's own
+// reports do, so a funder reading it cold knows what each code means.
+const RP_DEFINITIONS = [
+  ['ERI', 'Entrepreneurial Readiness Index', "The entrepreneur's capability, confidence, knowledge and readiness to succeed"],
+  ['BHI', 'Business Health Index', 'The overall health and performance of the enterprise'],
+  ['SRI', 'Sustainability Readiness Index', "The enterprise's resilience and preparedness for long-term sustainability"],
+  ['PEI', 'Programme Experience Index', "The quality of programme delivery and the participant's experience"],
+  ['II',  'Impact Index', 'Broader and longer-term change for individuals, enterprises, organisations and communities'],
+];
+
+function reportCoverTitle(){
+  const el = document.getElementById('reportTitleInput');
+  const v = el ? el.value.trim() : '';
+  return v || 'Monitoring, Evaluation and Learning';
+}
+
+function rpCoverValue(id, fallback){
+  const el = document.getElementById(id);
+  const v = el ? el.value.trim() : '';
+  return v || fallback || '';
+}
+
+function buildCohortReportBodyHtml(name, assessor, d){
+  const cimpLogo = document.querySelector('.emblem img').src;
+  const dateTxt = formatReportDate(document.getElementById('reportDateInput').value) || new Date().toLocaleDateString();
+
+  const title       = rpCoverValue('reportTitleInput', 'Monitoring, Evaluation and Learning');
+  const subtitle    = rpCoverValue('reportSubtitleInput', 'Baseline & Demographic Intake Report');
+  const preparedFor = rpCoverValue('reportPreparedForInput', d.sponsor || d.programme || '');
+  const credentials = rpCoverValue('reportCredentialsInput', '');
+  const implementer = d.hostOrg || '';
+
+  const runHead = `${escapeHtml((d.sponsor || d.programme || 'CIMP').toUpperCase())} - ${escapeHtml(title.toUpperCase())}`;
+
+  // ---------- page 1: cover ----------
+  const cover = `
+    <div class="rp-cover">
+      ${d.clientLogo ? `<img class="rp-cover-logo" src="${d.clientLogo}" alt="${escapeHtml(preparedFor)}">`
+                     : `<img class="rp-cover-logo" src="${cimpLogo}" alt="CIMP" style="max-height:96px;">`}
+      <h1>${escapeHtml(title)}</h1>
+      <h2 class="rp-sub">${escapeHtml(subtitle)}</h2>
+      ${preparedFor ? `<p class="lbl">Prepared for</p><p class="big">${escapeHtml(preparedFor)}</p>` : ''}
+      <p class="line">Programme: ${escapeHtml(d.programme || '—')}</p>
+      <p class="line">${escapeHtml(d.cohort || '—')}</p>
+      ${implementer ? `<p class="line">Implemented by: ${escapeHtml(implementer)}</p>` : ''}
+      <p class="by">Prepared by ${escapeHtml(assessor || '—')}</p>
+      ${credentials ? `<p class="creds">${escapeHtml(credentials)}</p>` : '<p class="creds">&nbsp;</p>'}
+      <p class="date">Report date: ${dateTxt}</p>
+      ${d.implementerLogo ? `<img class="rp-cover-impl" src="${d.implementerLogo}" alt="${escapeHtml(implementer)}">` : ''}
+      <div class="rp-cover-foot">
+        <table><tr>
+          <td class="rp-cover-foot-logo"><img src="${cimpLogo}" alt="CIMP"></td>
+          <td class="rp-cover-foot-txt">CIMP&trade; is an integrated Monitoring, Evaluation and Learning (MEL) system
+            that tracks participant progress, programme outcomes and impact over time through structured diagnostics
+            and evidence-based reporting.</td>
+        </tr></table>
+      </div>
+    </div>`;
+
+  // ---------- definitions ----------
+  const defs = `
+    <div class="rp-defs-title">DEFINITIONS / TERMINOLOGY</div>
+    <table class="rp-defs">
+      <thead><tr><th style="width:46px;">Code</th><th style="width:210px;">CIMP&trade; Index</th><th>What it measures</th></tr></thead>
+      <tbody>${RP_DEFINITIONS.map(([c, i, w]) =>
+        `<tr><td class="code">${c}</td><td class="idx">${i}</td><td>${w}</td></tr>`).join('')}</tbody>
+    </table>
+    <p class="rp-defs-note"><b>AII = Aggregate Impact Index.</b> It is useful to distinguish it from the underlying
+    indices explained above. The AII sits above the individual indices as the consolidated overall score generated
+    from the relevant CIMP&trade; measures. So conceptually: ERI + BHI + SRI + PEI + II &rarr; AII</p>`;
+
+  // ---------- tables ----------
+  const plainTbl = (head, rowsHtml) =>
+    `<table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>`;
+
+  const diag = d.periods.length ? plainTbl(['Period','Assessed','ERI','BHI','SRI','AII','RAG'],
+    d.periods.map(x => `<tr><td>${x.period}</td><td>${x.n}</td><td>${pctTxt(x.eri)}</td><td>${pctTxt(x.bhi)}</td><td>${pctTxt(x.sri)}</td><td>${pctTxt(x.aii)}</td><td>${ragFor(x.aii).label}</td></tr>`).join(''))
+    : '<p class="np">No diagnostic scores on record.</p>';
+
+  // Row striping is written inline because Word ignores :nth-child.
+  const people = d.rows.length ? `<table class="rp-grid">
+    <thead><tr><th>Beneficiary</th><th>Latest period</th><th>AII</th><th>Growth</th><th>Risk flag</th></tr></thead>
+    <tbody>${d.rows.map((r, i) => {
+      const bg = i % 2 === 0 ? '#DCEAF2' : '#F2F8FB';
+      return `<tr>
+        <td class="who" style="background:${bg};">${escapeHtml(r.name)}</td>
+        <td style="background:${bg};">${r.latestP || '—'}</td>
+        <td style="background:${bg};">${pctTxt(r.aii)}</td>
+        <td style="background:${bg};">${r.growth !== null ? (r.growth >= 0 ? '+' : '') + r.growth.toFixed(1) + ' pp' : '—'}</td>
+        <td style="background:${bg};">${r.flag}</td></tr>`;
+    }).join('')}</tbody></table>` : '';
+
+  const peii = d.peiiByQ.length ? plainTbl(['Quarter','Responses','Average PEII','Rating'],
+    d.peiiByQ.map(x => `<tr><td>${x.quarter}</td><td>${x.n}</td><td>${pctTxt(x.pct)}</td><td>${ratingForPEII(x.pct)}</td></tr>`).join(''))
+    : '<p class="np">No PEII entries on record.</p>';
+
+  const flags = Object.entries(d.flagCounts).map(([f, n]) => `${f}: ${n}`).join(' · ') || '—';
+
+  return `
+    ${cover}
+    <div class="rp-runhead">${runHead}</div>
+    ${defs}
 
     <h2>1. Cohort Overview</h2>
-    <div class="stat">Participants: <b>${d.memberCount}</b> · Assessed (latest period ${d.latest ? d.latest.period : '—'}): <b>${d.latest ? d.latest.n : 0}</b> · Cohort AII: <b>${d.latest ? pctTxt(d.latest.aii) : '—'}</b> (${ragFor(d.latest ? d.latest.aii : null).label})${d.base ? ' · Baseline AII: <b>'+pctTxt(d.base.aii)+'</b>' : ''}
-    ${d.demoCount ? `<br>Gender: ${tallyTxt(d.gender)}<br>Business stage: ${tallyTxt(d.stage)}<br>Industry: ${tallyTxt(d.industry)}` : ''}</div>
+    ${rpCohortDashboard(d)}
     ${paragraphs(document.getElementById('narrOverview').value)}
 
     <h2>2. Cohort Diagnostic Findings</h2>
-    <div class="stat">${diag}</div>
+    ${diag}
     ${paragraphs(document.getElementById('narrDiagnostic').value)}
 
     <h2>3. Growth, Risk &amp; Recommended Action</h2>
-    <div class="stat">Cohort growth vs baseline: <b>${d.growth!==null ? (d.growth>=0?'+':'')+d.growth.toFixed(1)+' pp' : '—'}</b> · Risk flags: ${flags}</div>
+    <p class="rp-flagline">Cohort growth vs baseline: <b>${d.growth !== null ? (d.growth >= 0 ? '+' : '') + d.growth.toFixed(1) + ' pp' : '—'}</b> &middot; Risk flags: ${flags}</p>
     ${people}
     ${paragraphs(document.getElementById('narrGrowth').value)}
 
     <h2>4. Programme Experience (PEII)</h2>
-    <div class="stat">${peii}</div>
+    ${peii}
     ${paragraphs(document.getElementById('narrPeii').value)}
 
     <h2>5. Overall Conclusion &amp; Recommendations</h2>
     ${paragraphs(document.getElementById('narrOverall').value)}
 
-    <footer>Generated by CIMP — Measurement &amp; Assessment Tool.</footer>
+    <div class="rp-callout">All CIMP&trade; reports are shared and discussed with the ${escapeHtml(implementer || 'programme')} mentoring team
+    to inform the ongoing development journey of participants. The findings guide mentoring priorities, identify areas
+    requiring further support or improvement, highlight emerging risks, and enable timely, targeted interventions
+    throughout the programme.</div>
   `;
 }
 
@@ -5438,6 +5818,8 @@ function rowToCohortReport(data){
   return {
     id: data.id, programme: data.programme, cohort: data.cohort, assessor: data.assessor || '',
     reportNumber: data.report_number, reportDate: data.report_date,
+    title: data.title || '', subtitle: data.subtitle || '',
+    preparedFor: data.prepared_for || '', credentials: data.credentials || '',
     sections: { overview: data.overview || '', diagnostic: data.diagnostic || '', growth: data.growth || '', peii: data.peii || '', overall: data.overall || '' },
     savedAt: data.saved_at,
   };
@@ -5464,6 +5846,10 @@ async function saveCohortReport(){
   const reportDate = document.getElementById('reportDateInput').value || todayISODate();
   const fields = {
     assessor: document.getElementById('reportAssessorInput').value.trim(),
+    title: document.getElementById('reportTitleInput').value.trim(),
+    subtitle: document.getElementById('reportSubtitleInput').value.trim(),
+    prepared_for: document.getElementById('reportPreparedForInput').value.trim(),
+    credentials: document.getElementById('reportCredentialsInput').value.trim(),
     overview: document.getElementById('narrOverview').value, diagnostic: document.getElementById('narrDiagnostic').value,
     growth: document.getElementById('narrGrowth').value, peii: document.getElementById('narrPeii').value, overall: document.getElementById('narrOverall').value,
     report_date: reportDate, saved_at: new Date().toISOString(),
@@ -5614,6 +6000,11 @@ function populateReportSelect(history, selectId){
 // Fills the form fields for a specific loaded report (or clears them for a new one).
 function populateReportForm(rec){
   document.getElementById('reportAssessorInput').value = rec ? (rec.assessor || '') : '';
+  // Blank on a new report means "use the default", which the report builder supplies.
+  document.getElementById('reportTitleInput').value = rec ? (rec.title || '') : '';
+  document.getElementById('reportSubtitleInput').value = rec ? (rec.subtitle || '') : '';
+  document.getElementById('reportPreparedForInput').value = rec ? (rec.preparedFor || '') : '';
+  document.getElementById('reportCredentialsInput').value = rec ? (rec.credentials || '') : '';
   document.getElementById('reportDateInput').value = rec ? (rec.reportDate || todayISODate()) : todayISODate();
   document.getElementById('narrOverview').value = rec ? (rec.sections.overview || '') : '';
   document.getElementById('narrDiagnostic').value = rec ? (rec.sections.diagnostic || '') : '';
@@ -5813,6 +6204,86 @@ const REPORT_PRINT_CSS = `
     p.np{font-style:italic; color:#888;}
     footer{margin-top:40px; font-size:11px; color:#888; border-top:1px solid #ddd; padding-top:10px;}
     @media print{ body{margin:0; max-width:none;} }
+
+    /* ---------- cover page ---------- */
+    .rp-cover{text-align:center; page-break-after:always;}
+    .html2pdf__page-break{page-break-after:always; height:0; margin:0; border:0;}
+    h2{page-break-after:avoid;}
+    table{page-break-inside:avoid;}
+    .rp-card{page-break-inside:avoid;}
+    .rp-cover-logo{max-height:110px; max-width:430px; margin:6px auto 44px; display:block;}
+    .rp-cover h1{font-size:25px; margin:0 0 3px; line-height:1.25;}
+    .rp-cover h2.rp-sub{font-size:20px; border:0; padding:0; margin:0 0 46px; line-height:1.3;}
+    .rp-cover .lbl{font-size:14px; font-weight:bold; margin:0;}
+    .rp-cover .big{font-size:15px; font-weight:bold; margin:0 0 22px;}
+    .rp-cover .line{font-size:14px; margin:0 0 15px;}
+    .rp-cover .by{font-size:12px; margin:24px 0 2px;}
+    .rp-cover .creds{font-size:10px; color:#444; margin:0 0 28px;}
+    .rp-cover .date{font-size:14px; font-weight:bold; margin:0 0 42px;}
+    .rp-cover-impl{max-height:130px; max-width:330px; margin:0 auto; display:block;}
+    .rp-cover-foot{margin-top:52px; padding-top:12px; border-top:1px solid #ddd; font-size:10px; color:#555; text-align:left;}
+    .rp-cover-foot table{width:100%; border-collapse:collapse;}
+    .rp-cover-foot td{border:0; padding:0; vertical-align:middle;}
+    .rp-cover-foot-logo{width:70px;}
+    .rp-cover-foot-logo img{height:44px; display:block;}
+    .rp-cover-foot-txt{padding-left:12px; line-height:1.5;}
+
+    /* ---------- running header ---------- */
+    .rp-runhead{font-size:9px; font-weight:bold; text-align:center; letter-spacing:.02em;
+      border-bottom:1px solid #1B4F5E; padding-bottom:5px; margin:0 0 20px;}
+
+    /* ---------- definitions ---------- */
+    .rp-defs-title{text-align:center; font-weight:bold; font-size:13px; margin:0 0 6px; letter-spacing:.04em;}
+    table.rp-defs{width:100%; border-collapse:collapse; font-size:10.5px; margin:0 0 18px;}
+    table.rp-defs th{background:#F1F6F8; border:1px solid #BFD3D9; padding:4px 7px; font-size:10px; text-align:center;}
+    table.rp-defs td{border:1px solid #BFD3D9; padding:4px 7px; vertical-align:top;}
+    table.rp-defs td.code{font-weight:bold; text-align:center;}
+    table.rp-defs td.idx{font-weight:bold;}
+    .rp-defs-note{font-size:10.5px; margin:0 0 6px; padding-bottom:8px; border-bottom:1px solid #9BB;}
+
+    /* ---------- cohort dashboard ---------- */
+    .rp-card{border:1px solid #CBDDE2; padding:14px 16px 10px; margin:8px 0 16px; background:#ffffff;}
+    .rp-card-eyebrow{font-size:8px; font-weight:bold; color:#188490; letter-spacing:.09em; margin-bottom:4px;}
+    .rp-card-title{font-size:17px; font-weight:bold; color:#183048; margin:0 0 2px;}
+    .rp-card-sub{font-size:9px; color:#6C6C6C; margin:0 0 12px;}
+    .rp-card-source{font-size:8px; color:#8A9499; margin-top:10px; padding-top:8px; border-top:1px solid #EDF2F4;}
+    table.rp-tiles{width:100%; border-collapse:collapse; table-layout:fixed;}
+    table.rp-tiles td.rp-tile{background:#F7FAFB; border:1px solid #E1EBEE; padding:10px 12px; vertical-align:top; width:33%;}
+    .rp-tile-head{font-size:9px; font-weight:bold; color:#183048; margin-bottom:6px;}
+    .rp-tile-body{text-align:center;}
+    .rp-tile-foot{font-size:7.5px; color:#8A9499; margin-top:8px;}
+    .rp-big{font-size:33px; font-weight:bold; color:#183048; line-height:1.1; margin-top:16px;}
+    .rp-big-sub{font-size:10px; color:#188490; font-weight:bold; margin-bottom:14px;}
+    .rp-none{font-size:9.5px; color:#8A9499; padding:34px 0;}
+    table.rp-gender{border-collapse:collapse; margin:0 auto;}
+    table.rp-gender td{vertical-align:middle; padding:0 4px;}
+    table.rp-legend{border-collapse:collapse; font-size:8.5px; text-align:left;}
+    table.rp-legend td{padding:2px 3px; vertical-align:top;}
+    table.rp-legend td.rp-dot{font-size:11px; line-height:1;}
+    .rp-legend-num{color:#8A9499;}
+    table.rp-panels{width:100%; border-collapse:collapse; table-layout:fixed;}
+    table.rp-panels td.rp-panel{background:#F7FAFB; border:1px solid #E1EBEE; padding:10px 12px; vertical-align:top; width:50%;}
+    .rp-panel-head{font-size:9px; font-weight:bold; color:#183048; margin-bottom:8px;}
+    table.rp-bars{width:100%; border-collapse:collapse; font-size:9.5px; table-layout:fixed;}
+    table.rp-bars td{border:0; padding:3px 0;}
+    td.rp-bar-label{padding-right:10px; color:#3C3C3C; width:44%; word-wrap:break-word; overflow-wrap:break-word;}
+    td.rp-bar-num{text-align:right; white-space:nowrap; color:#3C3C3C; width:64px; padding-left:8px;}
+    td.rp-bar-empty{color:#8A9499; font-style:italic;}
+    table.rp-bar-track{width:100%; border-collapse:collapse; background:#E4F0F0;}
+    table.rp-bar-track td{padding:0; font-size:1px; line-height:8px; height:8px;}
+    td.rp-bar-rest{background:#E4F0F0;}
+    table.rp-cov{margin-top:2px;}
+    table.rp-cov td{line-height:10px; height:10px;}
+
+    /* ---------- the striped grid used for the per-beneficiary table ---------- */
+    table.rp-grid{width:100%; border-collapse:collapse; font-size:10.5px; margin-top:6px;}
+    table.rp-grid th{background:#1B6E8C; color:#ffffff; border:1px solid #1B6E8C; padding:5px 8px; text-align:left; font-size:10px;}
+    table.rp-grid td{border:1px solid #CBDDE2; padding:5px 8px;}
+    table.rp-grid td.who{font-weight:bold;}
+
+    /* ---------- closing note ---------- */
+    .rp-callout{margin-top:30px; padding:10px 0; border-top:1px solid #9BB; border-bottom:1px solid #9BB;
+      color:#1B6E8C; font-size:11px; line-height:1.55;}
 `;
 
 // The report's actual content (header through footer) — no <html>/<head>
@@ -6045,14 +6516,49 @@ async function downloadReportPdf(){
 
     if(!container.offsetHeight) throw new Error('the report had no height to capture');
 
-    await html2pdf().set({
-      margin: 24,
+    // The body HTML carries one running header, which lands on the first page
+    // after the cover. html2canvas has no concept of a repeating header, so
+    // pages three and up get theirs stamped on afterwards as real jsPDF text,
+    // along with the page numbers. Styled to match .rp-runhead.
+    const runHeadTxt = (data && data.isCohort)
+      ? `${String(data.sponsor || data.programme || 'CIMP').toUpperCase()} - ${String(reportCoverTitle()).toUpperCase()}`
+      : `${name} — Impact Report`.toUpperCase();
+
+    const worker = html2pdf().set({
+      // Top margin leaves room for the stamped running header, bottom for the
+      // page number. [top, left, bottom, right]
+      margin: [46, 24, 34, 24],
       filename: reportExportFilename(name, 'pdf'),
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
       jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-    }).from(container).save();
+    }).from(container).toPdf();
+
+    await worker.get('pdf').then(pdf => {
+      const total = pdf.internal.getNumberOfPages();
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      for(let i = 2; i <= total; i++){
+        pdf.setPage(i);
+        // Page 2 already has the header drawn into the capture; later pages don't.
+        if(i > 2){
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7);
+          pdf.setTextColor(27, 79, 94);
+          pdf.text(runHeadTxt, pw / 2, 30, { align: 'center', maxWidth: pw - 80 });
+          pdf.setDrawColor(27, 79, 94);
+          pdf.setLineWidth(0.6);
+          pdf.line(40, 36, pw - 40, 36);
+        }
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(7);
+        pdf.setTextColor(130, 130, 130);
+        pdf.text(`Page ${i} of ${total}`, pw / 2, ph - 14, { align: 'center' });
+      }
+    });
+
+    await worker.save(reportExportFilename(name, 'pdf'));
   }catch(e){
     console.error('PDF export failed', e);
     showToast(`Could not generate the PDF: ${e.message || 'please try again'}. Download Word instead if this persists.`);
@@ -6069,12 +6575,36 @@ async function downloadReportWord(){
   const ctx = await prepareReportExport();
   if(!ctx) return;
   const { name, assessor, data } = ctx;
+  // Word gets a genuine running header and page numbers through its own
+  // header definition and field codes — neither of which a screenshot-based
+  // PDF can reproduce, which is why the Word file is the better master copy.
+  const runHead = data && data.isCohort
+    ? `${String(data.sponsor || data.programme || 'CIMP').toUpperCase()} - ${String(reportCoverTitle()).toUpperCase()}`
+    : `${name} — Impact Report`;
   const html = `<!DOCTYPE html>
   <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
   <head><meta charset="UTF-8"><title>${escapeHtml(name)} — Impact Report</title>
   <!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
-  <style>${REPORT_PRINT_CSS}</style></head>
-  <body>${buildReportBodyHtml(name, assessor, data)}</body></html>`;
+  <style>
+    ${REPORT_PRINT_CSS}
+    @page WordSection1 {
+      size:595.3pt 841.9pt; margin:62pt 62pt 56pt 62pt;
+      mso-header-margin:30pt; mso-footer-margin:30pt;
+      mso-header:url("file:///C:/doc.htm") h1; mso-footer:url("file:///C:/doc.htm") f1;
+    }
+    div.WordSection1{page:WordSection1;}
+    p.MsoHeader, p.MsoFooter{font-family:Georgia,'Times New Roman',serif; font-size:8.5pt; color:#444; margin:0;}
+    p.MsoHeader{border-bottom:1pt solid #1B4F5E; padding-bottom:3pt; text-align:center;}
+    p.MsoFooter{text-align:right;}
+  </style></head>
+  <body>
+  <!--[if gte mso 9]><xml><w:LatentStyles/></xml><![endif]-->
+  <div style="mso-element:header" id="h1"><p class="MsoHeader">${escapeHtml(runHead)}</p></div>
+  <div style="mso-element:footer" id="f1"><p class="MsoFooter">
+    <span style="mso-field-code:PAGE"></span> of <span style="mso-field-code:NUMPAGES"></span>
+  </p></div>
+  <div class="WordSection1">${buildReportBodyHtml(name, assessor, data).replace(/<div class="rp-runhead">[\s\S]*?<\/div>/, '')}</div>
+  </body></html>`;
 
   const blob = new Blob(['﻿', html], { type: 'application/msword' });
   const url = URL.createObjectURL(blob);
