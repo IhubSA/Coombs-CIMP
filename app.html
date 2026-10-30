@@ -614,7 +614,7 @@
 
     <div id="forgotPasswordPanel">
       <p class="sub" style="margin-bottom:16px;">Enter whatever you sign in with. Administrators get a link by email;
-        participants who sign in with a phone number get a six-digit code by SMS.</p>
+        participants who sign in with a phone number get a numeric code by SMS.</p>
       <form id="forgotPasswordForm">
         <div class="field">
           <label for="forgotEmail">Email or phone number</label>
@@ -631,20 +631,20 @@
       </div>
     </div>
 
-    <!-- Participants get a six-digit code rather than a link: link scanners
+    <!-- Participants get a numeric code rather than a link: link scanners
          along the SMS path were fetching the one-time recovery links and
          using them up before the participant ever saw them. -->
     <div id="smsCodePanel">
-      <p class="sub" style="margin-bottom:16px;">Enter the six-digit code we sent you by SMS, then choose your new password.</p>
+      <p class="sub" style="margin-bottom:16px;">Enter the code we sent you by SMS, then choose your new password.</p>
       <form id="smsCodeForm">
         <div class="field">
           <label for="smsCodePhone">Your phone number</label>
           <input type="text" id="smsCodePhone" autocomplete="username" inputmode="tel" required />
         </div>
         <div class="field">
-          <label for="smsCodeValue">Six-digit code</label>
+          <label for="smsCodeValue">Code from the SMS</label>
           <input type="text" id="smsCodeValue" inputmode="numeric" autocomplete="one-time-code"
-                 pattern="[0-9]*" maxlength="6" required />
+                 pattern="[0-9]*" maxlength="12" required />
         </div>
         <button type="submit" class="btn btn-primary" id="smsCodeSubmitBtn">Continue</button>
         <div id="smsCodeError"></div>
@@ -1533,8 +1533,11 @@ function bindAuthUI(){
       errorEl.style.display = 'block';
       return;
     }
-    if(token.length !== 6){
-      errorEl.textContent = 'The code is six digits.';
+    // Supabase decides how long the code is (this project mints eight
+    // digits, not the six the docs suggest), so the length is not hardcoded
+    // here — a box that only took six silently made the real code untypeable.
+    if(token.length < 4 || token.length > 12){
+      errorEl.textContent = 'Enter the code from the SMS, digits only.';
       errorEl.style.display = 'block';
       return;
     }
@@ -1600,7 +1603,7 @@ function bindAuthUI(){
         showAuthPanel('smscode');
         document.getElementById('smsCodeValue').focus();
         showToast(payload.message
-          || 'If that number belongs to a CIMP account, a six-digit code has been sent by SMS.');
+          || 'If that number belongs to a CIMP account, a code has been sent by SMS.');
       } else {
         // redirectTo must be on the "Redirect URLs" allow-list in the
         // Supabase dashboard (Authentication → URL Configuration), or
