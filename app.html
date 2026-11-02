@@ -173,6 +173,15 @@
   .scale button.sel{
     background:var(--pine); color:#fff; border-color:var(--pine);
   }
+  /* N/A is not a score, so it does not sit on the 1-5 run: it is wider,
+     set apart by a gap, and selects grey rather than pine. */
+  .scale button.na-btn{
+    width:auto; min-width:40px; padding:0 8px; margin-left:8px;
+    font-size:11px; letter-spacing:.03em;
+  }
+  .scale button.na-btn.sel{
+    background:var(--grey); border-color:var(--grey); color:#fff;
+  }
 
   /* ---------- Sidebar ---------- */
   .sidebar{position:sticky; top:20px; display:flex; flex-direction:column; gap:14px;}
@@ -1976,6 +1985,15 @@ const QUESTION_LIBRARY = {
         ["ERI_DIG4","Aware of online platforms to reach new customers"],
         ["ERI_DIG5","Confident using mobile money or digital payment tools"],
       ],
+      // Environmental items added Nov 2026 at the client's request. They are
+      // split deliberately: what the entrepreneur KNOWS sits in ERI, what the
+      // business DOES sits in BHI, and what it plans for sits in SRI. The two
+      // older catch-all items (SRI_ENV1, SRI_ENV3) were retired in the same
+      // change because these cover the same ground more precisely.
+      "Environmental Awareness": [
+        ["ERI_ENV1","Understands how the business's activities may affect the environment"],
+        ["ERI_ENV2","Can identify practical ways to reduce the business's environmental impact"],
+      ],
     }
   },
   BHI: {
@@ -2008,6 +2026,10 @@ const QUESTION_LIBRARY = {
         ["BHI_OPS4","Has adequate equipment/tools to operate efficiently"],
         ["BHI_OPS5","Has a plan to manage operational disruptions"],
       ],
+      "Environmental Practice": [
+        ["BHI_ENV1","Takes practical steps to reduce unnecessary waste"],
+        ["BHI_ENV2","Actively manages its use of resources such as water, electricity, fuel or materials, where applicable"],
+      ],
       "Employment & Local Impact": [
         ["BHI_EMP1","Business currently employs staff (full-time or part-time)"],
         ["BHI_EMP3","Business sources goods/services locally where possible"],
@@ -2036,9 +2058,14 @@ const QUESTION_LIBRARY = {
       "Operational Sustainability": [
         ["SRI_OPS5","Business systems can keep operating without ongoing external support"],
       ],
+      // SRI_ENV1 ("considers environmental impact in its operations") and
+      // SRI_ENV3 ("uses resources efficiently") were retired here: the first
+      // is now split across ERI_ENV1/ERI_ENV2/BHI_ENV1 and the second is
+      // BHI_ENV2 in clearer wording. Neither code had been scored by anyone,
+      // so no saved assessment is affected. The codes are not reused.
       "Environmental Sustainability": [
-        ["SRI_ENV1","Business considers environmental impact in its operations"],
-        ["SRI_ENV3","Uses resources (water, energy, materials) efficiently"],
+        ["SRI_ENV4","Has identified environmental risks that could affect future operations"],
+        ["SRI_ENV5","Has plans or measures in place to manage environmental risks"],
       ],
       "Social Sustainability": [
         ["SRI_SOC1","Business contributes positively to the local community"],
@@ -2218,6 +2245,7 @@ function buildQuestionArea(){
           </div>
           <div class="scale" data-code="${code}">
             ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}">${v}</button>`).join('')}
+            ${questionAllowsNA(text) ? `<button type="button" class="na-btn" data-val="NA" title="Not applicable to this business">N/A</button>` : ''}
           </div>
         `;
         dg.appendChild(row);
@@ -2232,7 +2260,12 @@ function buildQuestionArea(){
     const btn = e.target.closest('.scale button');
     if(!btn) return;
     const code = btn.parentElement.getAttribute('data-code');
-    const val = parseInt(btn.getAttribute('data-val'), 10);
+    const raw = btn.getAttribute('data-val');
+    // N/A is stored as a sentinel rather than a number: it counts as answered
+    // so the questionnaire can reach 100%, but it is left out of every
+    // average, so an item that does not apply cannot drag an index down.
+    if(raw === 'NA' && !NA_ALLOWED_CODES.has(code)) return;
+    const val = raw === 'NA' ? NA_SCORE : parseInt(raw, 10);
     if(scores[code] === val){
       delete scores[code]; // toggle off
     } else {
@@ -2256,24 +2289,56 @@ function toggleIndex(key, forceOpen){
   chev.classList.toggle('rot', willOpen);
 }
 
+// data-val is the string "1".."5" or "NA"; scores holds a number or the
+// sentinel. Comparing through parseInt would make NaN of "NA" and the button
+// would never light up, so the stored value is turned into its label instead.
+function scaleValueLabel(v){
+  return v === NA_SCORE ? 'NA' : (isScored(v) ? String(v) : null);
+}
+function paintScale(wrap){
+  const code = wrap.getAttribute('data-code');
+  const want = scaleValueLabel(scores[code]);
+  wrap.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('sel', b.getAttribute('data-val') === want);
+  });
+}
 function refreshScaleUI(code){
   const wrap = document.querySelector(`.scale[data-code="${code}"]`);
-  if(!wrap) return;
-  wrap.querySelectorAll('button').forEach(b => {
-    b.classList.toggle('sel', parseInt(b.getAttribute('data-val'),10) === scores[code]);
-  });
+  if(wrap) paintScale(wrap);
 }
 
 function refreshAllScaleUI(){
-  document.querySelectorAll('.scale').forEach(wrap => {
-    const code = wrap.getAttribute('data-code');
-    wrap.querySelectorAll('button').forEach(b => {
-      b.classList.toggle('sel', parseInt(b.getAttribute('data-val'),10) === scores[code]);
-    });
-  });
+  document.querySelectorAll('.scale').forEach(paintScale);
 }
 
 /* ============================ SCORING ============================ */
+
+// Some items genuinely do not apply to some businesses — a consultant has no
+// meaningful water or fuel use to manage. Forcing a 1-5 answer there would
+// score them badly for something they cannot change, so N/A is stored as its
+// own value and skipped when averaging. Two predicates keep the distinction
+// in one place: isScored() is "counts towards the index", isAnswered() is
+// "the assessor has dealt with this item".
+const NA_SCORE = 'NA';
+function isScored(v){ return typeof v === 'number' && v >= 1 && v <= 5; }
+function isAnswered(v){ return v === NA_SCORE || isScored(v); }
+
+// N/A is offered only on items that are explicitly conditional — the ones
+// whose wording ends "where applicable" / "where possible" / "where
+// relevant". Everything else must be scored, so N/A cannot become a way to
+// skip a hard question. Deriving it from the text rather than a separate
+// list means the button and the reason for it can never drift apart: write a
+// question with the clause and it gets an N/A, drop the clause and it loses
+// one, with nothing else to remember to update.
+function questionAllowsNA(text){
+  return /\bwhere (applicable|possible|relevant)\b/i.test(text || '');
+}
+const NA_ALLOWED_CODES = new Set(
+  Object.values(QUESTION_LIBRARY)
+    .flatMap(idx => Object.values(idx.domains).flat())
+    .filter(([, text]) => questionAllowsNA(text))
+    .map(([code]) => code)
+);
 
 function indexCodes(key){
   return Object.values(QUESTION_LIBRARY[key].domains).flat().map(q => q[0]);
@@ -2281,10 +2346,13 @@ function indexCodes(key){
 
 function computeIndexPct(key){
   const codes = indexCodes(key);
-  const vals = codes.map(c => scores[c]).filter(v => v !== undefined);
+  const vals = codes.map(c => scores[c]).filter(isScored);
+  const answered = codes.filter(c => isAnswered(scores[c])).length;
+  // Every item marked N/A means the index has nothing to average, which is
+  // "No Data" rather than zero.
   if(vals.length === 0) return null;
   const avg = vals.reduce((a,b)=>a+b,0) / vals.length;
-  return { pct: avg/5*100, answered: vals.length, total: codes.length };
+  return { pct: avg/5*100, answered, total: codes.length };
 }
 
 function ragFor(pct){
@@ -2337,7 +2405,7 @@ function recompute(){
   });
 
   // progress
-  const answered = Object.keys(scores).length;
+  const answered = Object.values(scores).filter(isAnswered).length;
   document.getElementById('progressFill').style.width = `${(answered/TOTAL_QUESTIONS*100).toFixed(1)}%`;
   document.getElementById('progressLabel').textContent = `${answered} of ${TOTAL_QUESTIONS} items scored`;
 
@@ -2501,7 +2569,7 @@ async function loadBaselineAII(beneficiary){
 
 function pctFromScores(scoreObj, key){
   const codes = indexCodes(key);
-  const vals = codes.map(c => scoreObj[c]).filter(v => v !== undefined);
+  const vals = codes.map(c => scoreObj[c]).filter(isScored);
   if(vals.length === 0) return null;
   const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
   return { pct: avg/5*100 };
@@ -4190,6 +4258,8 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["ERI_DIG1", "I use WhatsApp or digital communication for my business."],
       ["ERI_DIG2", "I use social media to promote my business."],
       ["ERI_DIG3", "I can create invoices or simple business documents"],
+      ["ERI_ENV1", "I understand how my business activities may affect the environment."],
+      ["ERI_ENV2", "I can identify practical ways to reduce the environmental impact of my business."],
     ],
     BHI: [
       ["BHI_REV4", "My business is generating regular income."],
@@ -4199,6 +4269,8 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_OPS1", "I have enough equipment/resources/ stock."],
       ["BHI_EMP1", "My business creates employment or income opportunities."],
       ["BHI_EMP3", "I support local suppliers where possible."],
+      ["BHI_ENV1", "My business takes practical steps to reduce unnecessary waste."],
+      ["BHI_ENV2", "My business manages its use of water, electricity, fuel or materials, where applicable."],
     ],
     SRI: [
       ["SRI_GROW1", "I plan for future business growth."],
@@ -4206,6 +4278,8 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["SRI_LEAD5", "I actively look for ways to improve my business."],
       ["SRI_OPS5", "I can identify business risks."],
       ["SRI_LEAD4", "I value customer and community relationships."],
+      ["SRI_ENV4", "I can identify environmental risks that could affect my business."],
+      ["SRI_ENV5", "My business has plans or measures to manage environmental risks."],
     ],
   },
   Q1: {
@@ -4238,7 +4312,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["ERI_DIG2", "I use social media more effectively to market my business."],
       ["ERI_DIG3", "I can prepare business documents independently."],
       ["ERI_DIG4", "I use digital tools to manage my business records."],
-      ["ERI_DIG5", "I communicate professionally with customers online. Send out Month 4, Week 2:\\"],
+      ["ERI_DIG5", "I communicate professionally with customers online."],
+      ["ERI_ENV1", "My understanding of how my business affects the environment has improved."],
+      ["ERI_ENV2", "I am better able to identify ways to reduce my business's environmental impact."],
     ],
     BHI: [
       ["BHI_REV1", "My business income has improved since joining the programme."],
@@ -4255,7 +4331,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_MGT2", "I review my business performance regularly."],
       ["BHI_MGT3", "I can identify and manage business risks."],
       ["BHI_MGT4", "I have improved the way I manage my customers."],
-      ["BHI_MGT5", "My business is becoming better organised for growth. Send out Month 4, Week 3:\\"],
+      ["BHI_MGT5", "My business is becoming better organised for growth."],
+      ["BHI_ENV1", "My business has reduced unnecessary waste."],
+      ["BHI_ENV2", "I manage my use of water, electricity, fuel or materials more carefully, where applicable."],
     ],
     SRI: [
       ["SRI_SUS1", "My business is becoming more sustainable."],
@@ -4267,7 +4345,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["SRI_SOC2", "My business creates more economic opportunities for others."],
       ["SRI_SOC3", "I support local businesses whenever possible."],
       ["SRI_SOC4", "I operate my business ethically."],
-      ["SRI_SOC5", "My relationships with customers have improved. [\\ ]{.underline}"],
+      ["SRI_SOC5", "My relationships with customers have improved."],
+      ["SRI_ENV4", "I am better able to identify environmental risks to my business."],
+      ["SRI_ENV5", "I have begun putting measures in place to manage environmental risks."],
     ],
   },
   Q2: {
@@ -4301,7 +4381,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["ERI_DIG2", "I regularly use social media or digital marketing to promote my business."],
       ["ERI_DIG3", "I prepare business documents confidently using digital tools."],
       ["ERI_DIG4", "I use spreadsheets or digital systems to manage my business."],
-      ["ERI_DIG5", "I maintain a professional online presence. Send out Month 7, Week 2:\\"],
+      ["ERI_DIG5", "I maintain a professional online presence."],
+      ["ERI_ENV1", "I apply my understanding of environmental impact when making business decisions."],
+      ["ERI_ENV2", "I actively identify ways to reduce my business's environmental impact."],
     ],
     BHI: [
       ["BHI_REV1", "My business income is steadily increasing."],
@@ -4318,7 +4400,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_MGT2", "I review my business performance every month."],
       ["BHI_MGT3", "I actively identify and manage business risks."],
       ["BHI_MGT4", "I maintain good customer management systems."],
-      ["BHI_MGT5", "My business is becoming more structured and organised. Send out Month 7, Week 3:\\"],
+      ["BHI_MGT5", "My business is becoming more structured and organised."],
+      ["BHI_ENV1", "My business has become more effective at reducing unnecessary waste."],
+      ["BHI_ENV2", "I actively manage my use of water, electricity, fuel or materials, where applicable."],
     ],
     SRI: [
       ["SRI_SUS1", "My business is becoming more financially sustainable."],
@@ -4331,6 +4415,8 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["SRI_SOC3", "I actively support other local businesses where possible."],
       ["SRI_SOC4", "My business is recognised for operating ethically."],
       ["SRI_SOC5", "I have built stronger relationships with customers and stakeholders"],
+      ["SRI_ENV4", "I actively identify environmental risks that could affect my business."],
+      ["SRI_ENV5", "My measures for managing environmental risks are becoming established."],
     ],
   },
   Q3: {
@@ -4364,7 +4450,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["ERI_DIG2", "I use digital marketing regularly to attract customers."],
       ["ERI_DIG3", "I confidently produce professional business documents."],
       ["ERI_DIG4", "I use digital tools to monitor and manage business performance."],
-      ["ERI_DIG5", "My online communication reflects a professional business image. Send out Month 10, Week 2:\\"],
+      ["ERI_DIG5", "My online communication reflects a professional business image."],
+      ["ERI_ENV1", "I use my understanding of environmental impact to improve how my business operates."],
+      ["ERI_ENV2", "I regularly find and apply practical ways to reduce my business's environmental impact."],
     ],
     BHI: [
       ["BHI_REV1", "My business income has increased consistently over the past three months."],
@@ -4381,7 +4469,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_MGT2", "I monitor my business performance using measurable indicators."],
       ["BHI_MGT3", "I proactively manage business risks."],
       ["BHI_MGT4", "I maintain strong relationships with my customers."],
-      ["BHI_MGT5", "My business systems are well organised and support future growth. Send out Month 10, Week 3:\\"],
+      ["BHI_MGT5", "My business systems are well organised and support future growth."],
+      ["BHI_ENV1", "Reducing unnecessary waste is part of how my business operates day to day."],
+      ["BHI_ENV2", "My business uses water, electricity, fuel or materials efficiently, where applicable."],
     ],
     SRI: [
       ["SRI_SUS1", "My business is becoming financially sustainable."],
@@ -4394,6 +4484,8 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["SRI_SOC3", "I support local businesses and suppliers where possible."],
       ["SRI_SOC4", "I operate my business responsibly and ethically."],
       ["SRI_SOC5", "My reputation with customers and stakeholders has improved"],
+      ["SRI_ENV4", "I proactively identify environmental risks to my business."],
+      ["SRI_ENV5", "My business has working measures in place to manage environmental risks."],
     ],
   },
   Q4: {
@@ -4424,7 +4516,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["ERI_DIG2", "I effectively use digital marketing to attract customers."],
       ["ERI_DIG3", "I confidently prepare professional business documents."],
       ["ERI_DIG4", "I use digital systems to manage my business information."],
-      ["ERI_DIG5", "My online business presence supports business growth. Send out Month 12/13, Week 2:\\"],
+      ["ERI_DIG5", "My online business presence supports business growth."],
+      ["ERI_ENV1", "I understand how my business activities affect the environment."],
+      ["ERI_ENV2", "I have the knowledge needed to reduce my business's environmental impact."],
     ],
     BHI: [
       ["BHI_REV1", "My business generates sustainable income."],
@@ -4441,7 +4535,9 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_MGT2", "I regularly review business performance and adjust where necessary."],
       ["BHI_MGT3", "I actively manage business risks."],
       ["BHI_MGT4", "I have effective systems for managing customers and suppliers."],
-      ["BHI_MGT5", "My business is well positioned for future growth. Send out Month 12/13, Week 3:\\"],
+      ["BHI_MGT5", "My business is well positioned for future growth."],
+      ["BHI_ENV1", "My business consistently avoids unnecessary waste."],
+      ["BHI_ENV2", "My business manages its use of water, electricity, fuel or materials responsibly, where applicable."],
     ],
     SRI: [
       ["SRI_SUS1", "My business can continue operating successfully without programme support."],
@@ -4454,6 +4550,8 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["SRI_SOC3", "I actively support local suppliers and businesses."],
       ["SRI_SOC4", "My business operates ethically and responsibly."],
       ["SRI_SOC5", "My business has earned the trust of customers and the community"],
+      ["SRI_ENV4", "I can identify the environmental risks that affect my business's future."],
+      ["SRI_ENV5", "My business has lasting measures in place to manage environmental risks."],
     ],
   },
 };
@@ -4790,6 +4888,7 @@ function buildEnterpriseSurveyArea(period){
                 <div><div class="q-text">${text}</div><span class="q-code">${code}</span></div>
                 <div class="scale" data-code="${code}">
                   ${[1,2,3,4,5].map(v => `<button type="button" data-val="${v}" class="${enterpriseSurveyScores[code]===v?'sel':''}">${v}</button>`).join('')}
+                  ${questionAllowsNA(text) ? `<button type="button" class="na-btn${enterpriseSurveyScores[code]===NA_SCORE?' sel':''}" data-val="NA" title="Not applicable to my business">N/A</button>` : ''}
                 </div>
               </div>
             `).join('')}
@@ -4802,12 +4901,25 @@ function buildEnterpriseSurveyArea(period){
   area.querySelectorAll('.scale button').forEach(btn => {
     btn.addEventListener('click', () => {
       const code = btn.parentElement.getAttribute('data-code');
-      const val = parseInt(btn.getAttribute('data-val'), 10);
+      const raw = btn.getAttribute('data-val');
+      if(raw === 'NA' && !questionAllowsNA(enterpriseQuestionText(period, code))) return;
+      const val = raw === 'NA' ? NA_SCORE : parseInt(raw, 10);
       enterpriseSurveyScores[code] = (enterpriseSurveyScores[code] === val) ? undefined : val;
       enterpriseMissing.delete(code);
       buildEnterpriseSurveyArea(period);
     });
   });
+}
+
+// The guard above needs the item's wording to decide whether N/A is allowed,
+// and the survey's wording changes from period to period.
+function enterpriseQuestionText(period, code){
+  const lib = ENTERPRISE_SURVEY_LIBRARY[period] || {};
+  for(const idx of ['ERI','BHI','SRI']){
+    const hit = (lib[idx] || []).find(([c]) => c === code);
+    if(hit) return hit[1];
+  }
+  return '';
 }
 
 async function loadEnterpriseSurvey(beneficiary, period){
