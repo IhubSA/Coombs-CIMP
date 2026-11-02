@@ -173,6 +173,19 @@
   .scale button.sel{
     background:var(--pine); color:#fff; border-color:var(--pine);
   }
+  .agri-gate{ padding:16px 18px; }
+  .agri-gate-q{ font-size:13.5px; font-weight:600; color:var(--ink); margin-bottom:10px; line-height:1.45; }
+  .agri-gate-opts{ display:flex; gap:10px; flex-wrap:wrap; }
+  .agri-gate-opts button{
+    flex:0 1 auto; padding:8px 14px; border-radius:8px; border:1px solid var(--sage-line);
+    background:var(--sage); font-family:'IBM Plex Sans',sans-serif; font-size:12.5px;
+    color:var(--ink-soft); cursor:pointer; transition:all .12s ease;
+  }
+  .agri-gate-opts button:hover{ border-color:var(--gold); }
+  .agri-gate-opts button.sel{ background:var(--pine); border-color:var(--pine); color:#fff; }
+  .agri-gate-note{ font-size:11.5px; color:var(--ink-soft); margin-top:9px; }
+  .agri-gate-note.warn{ color:var(--orange); font-weight:600; }
+
   /* N/A is not a score, so it does not sit on the 1-5 run: it is wider,
      set apart by a gap, and selects grey rather than pine. */
   .scale button.na-btn{
@@ -2078,6 +2091,81 @@ const QUESTION_LIBRARY = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Agriculture-specific environmental items.
+//
+// Five of the six restate the universal environmental items in farming terms,
+// so for an agricultural enterprise they REPLACE their counterpart rather than
+// being asked alongside it. Asking both would put the same question twice and
+// would roughly double environment's weight in a farmer's score against any
+// other business. Only A01 has no universal equivalent, so it is the one item
+// that is genuinely added.
+//
+// The client's numbering (A01-A06) maps as:
+//   A01 -> ERI_AGR1  added
+//   A02 -> ERI_AGR2  replaces ERI_ENV2
+//   A03 -> BHI_AGR1  replaces BHI_ENV2
+//   A04 -> BHI_AGR2  replaces BHI_ENV1
+//   A05 -> SRI_AGR1  replaces SRI_ENV4
+//   A06 -> SRI_AGR2  replaces SRI_ENV5
+//
+// Wording is third person to match the rest of the assessor questionnaire;
+// the beneficiary self-assessment carries the first-person versions.
+const AGRI_QUESTIONS = {
+  ERI: {
+    replace: {
+      ERI_ENV2: ["ERI_AGR2","Can identify ways to improve water efficiency, soil management or responsible input use"],
+    },
+    extra: [
+      ["ERI_AGR1","Understands sustainable agricultural practices relevant to the farming or agricultural business"],
+    ],
+  },
+  BHI: {
+    replace: {
+      BHI_ENV2: ["BHI_AGR1","Implements practices to prevent unnecessary water use, soil degradation or resource wastage"],
+      BHI_ENV1: ["BHI_AGR2","Takes practical steps to manage agricultural waste, including reuse, recycling or composting where appropriate"],
+    },
+    extra: [],
+  },
+  SRI: {
+    replace: {
+      SRI_ENV4: ["SRI_AGR1","Has considered environmental threats such as drought, changing weather, water shortages or declining soil quality"],
+      SRI_ENV5: ["SRI_AGR2","Has measures in place to maintain or adapt production when environmental conditions change"],
+    },
+    extra: [],
+  },
+};
+
+// Where the agriculture answer is kept. It rides along inside the scores
+// object so it is saved, loaded and merged by code that already exists, and
+// it is skipped by the scoring functions because indexCodes() only ever
+// returns real question codes.
+const AGRI_GATE_KEY = '__agri';
+const AGRI_GATE_LABEL = 'Does this enterprise participate in agricultural production, livestock farming, agri-processing or another agricultural activity?';
+function isAgriScores(scoreObj){ return (scoreObj || {})[AGRI_GATE_KEY] === 'Yes'; }
+
+// The items actually put in front of someone, given the gate. For a farmer
+// the replaced items are swapped in place (so they keep their position in the
+// domain) and the extras are appended.
+function effectiveDomains(key, agri){
+  const spec = AGRI_QUESTIONS[key] || { replace:{}, extra:[] };
+  const domains = {};
+  for(const [dom, items] of Object.entries(QUESTION_LIBRARY[key].domains)){
+    domains[dom] = items.map(q => (agri && spec.replace[q[0]]) ? spec.replace[q[0]] : q);
+  }
+  if(agri && spec.extra.length){
+    const envDom = Object.keys(domains).find(d => /Environment/i.test(d)) || Object.keys(domains).pop();
+    domains[envDom] = domains[envDom].concat(spec.extra);
+  }
+  return domains;
+}
+function renderedCodes(key, agri){
+  return Object.values(effectiveDomains(key, agri)).flat().map(q => q[0]);
+}
+function totalQuestionsFor(agri){
+  return ['ERI','BHI','SRI'].reduce((n,k) => n + renderedCodes(k, agri).length, 0);
+}
+
 // Previously seeded a handful of built-in test names into every beneficiary
 // dropdown across the app. Left empty now that self-service onboarding is
 // live — new beneficiaries come from real invites, not a hardcoded list.
@@ -2209,6 +2297,25 @@ const TOTAL_QUESTIONS = Object.values(QUESTION_LIBRARY)
 function buildQuestionArea(){
   const area = document.getElementById('questionArea');
   area.innerHTML = '';
+  const agri = isAgriScores(scores);
+
+  // The screening question sits above the indices because it changes which
+  // ones are asked. Default is "No" until someone says otherwise, so a
+  // non-farming business is never shown farming questions by accident.
+  const gate = document.createElement('div');
+  gate.className = 'index-block agri-gate';
+  gate.innerHTML = `
+    <div class="agri-gate-body">
+      <div class="agri-gate-q">${AGRI_GATE_LABEL}</div>
+      <div class="agri-gate-opts">
+        <button type="button" data-agri="Yes" class="${agri?'sel':''}">Yes — agriculture-related enterprise</button>
+        <button type="button" data-agri="No" class="${scores[AGRI_GATE_KEY]==='No'?'sel':''}">No — other business sector</button>
+      </div>
+      <div class="agri-gate-note" id="agriGateNote"></div>
+    </div>`;
+  area.appendChild(gate);
+  gate.querySelectorAll('[data-agri]').forEach(b => b.addEventListener('click', () => setAgriGate(b.getAttribute('data-agri'))));
+
   Object.entries(QUESTION_LIBRARY).forEach(([key, idx]) => {
     const block = document.createElement('div');
     block.className = 'index-block';
@@ -2218,7 +2325,7 @@ function buildQuestionArea(){
           <span class="index-tag tag-${key}">${key}</span>
           <div>
             <h2>${idx.label}</h2>
-            <div class="sub">${Object.values(idx.domains).reduce((s,a)=>s+a.length,0)} items · weight ${(idx.weight*100).toFixed(0)}%</div>
+            <div class="sub">${renderedCodes(key, agri).length} items · weight ${(idx.weight*100).toFixed(0)}%</div>
           </div>
         </div>
         <div class="index-head-right">
@@ -2231,7 +2338,7 @@ function buildQuestionArea(){
     area.appendChild(block);
 
     const body = block.querySelector(`#body-${key}`);
-    Object.entries(idx.domains).forEach(([domainName, items]) => {
+    Object.entries(effectiveDomains(key, agri)).forEach(([domainName, items]) => {
       const dg = document.createElement('div');
       dg.className = 'domain-group';
       dg.innerHTML = `<div class="domain-title">${domainName}</div>`;
@@ -2275,8 +2382,49 @@ function buildQuestionArea(){
     recompute();
   });
 
+  renderAgriGateNote();
+
   // open ERI by default
   toggleIndex('ERI', true);
+}
+
+function setAgriGate(value){
+  if(scores[AGRI_GATE_KEY] === value) return;
+  scores[AGRI_GATE_KEY] = value;
+  const agri = value === 'Yes';
+  // Whatever is no longer on screen must not keep contributing a score.
+  const keep = new Set(['ERI','BHI','SRI'].flatMap(k => renderedCodes(k, agri)));
+  Object.keys(scores).forEach(c => {
+    if(c !== AGRI_GATE_KEY && !keep.has(c)) delete scores[c];
+  });
+  buildQuestionArea();
+  refreshAllScaleUI();
+  recompute();
+  renderAgriGateNote();
+}
+
+// Intake already records an industry, so when it says agriculture the gate
+// answers itself. The note explains why it is pre-filled, and says so plainly
+// when the assessor's answer disagrees with what intake holds — that is worth
+// seeing rather than silently overriding either way.
+let agriIntakeHint = null;   // true | false | null (no intake on record)
+function renderAgriGateNote(){
+  const el = document.getElementById('agriGateNote');
+  if(!el) return;
+  const answered = scores[AGRI_GATE_KEY];
+  if(agriIntakeHint === null){
+    el.textContent = answered ? '' : 'No demographic intake on record for this beneficiary, so please answer this.';
+    el.className = 'agri-gate-note';
+    return;
+  }
+  const intakeSays = agriIntakeHint ? 'Yes' : 'No';
+  if(!answered || answered === intakeSays){
+    el.textContent = `Intake records this business as ${agriIntakeHint ? '' : 'not '}agriculture-related.`;
+    el.className = 'agri-gate-note';
+  } else {
+    el.textContent = `Note: intake records this business as ${agriIntakeHint ? '' : 'not '}agriculture-related. Your answer here is the one that counts.`;
+    el.className = 'agri-gate-note warn';
+  }
 }
 
 function toggleIndex(key, forceOpen){
@@ -2340,12 +2488,23 @@ const NA_ALLOWED_CODES = new Set(
     .map(([code]) => code)
 );
 
+// Every code the index could contain, universal and agricultural alike. A
+// record only ever holds one variant of each pair, and the scoring functions
+// average what is answered, so the union is safe and means saved records can
+// be scored without knowing whether the business was agricultural.
 function indexCodes(key){
-  return Object.values(QUESTION_LIBRARY[key].domains).flat().map(q => q[0]);
+  const spec = AGRI_QUESTIONS[key] || { replace:{}, extra:[] };
+  return Object.values(QUESTION_LIBRARY[key].domains).flat().map(q => q[0])
+    .concat(Object.values(spec.replace).map(q => q[0]))
+    .concat(spec.extra.map(q => q[0]));
 }
 
 function computeIndexPct(key){
-  const codes = indexCodes(key);
+  // Score against what this business was actually asked, not the union of
+  // both variants. A farmer is scored on the agricultural items, anyone else
+  // on the universal ones, and a stale answer left over from a changed gate
+  // cannot leak into the average.
+  const codes = renderedCodes(key, isAgriScores(scores));
   const vals = codes.map(c => scores[c]).filter(isScored);
   const answered = codes.filter(c => isAnswered(scores[c])).length;
   // Every item marked N/A means the index has nothing to average, which is
@@ -2405,9 +2564,10 @@ function recompute(){
   });
 
   // progress
+  const total = totalQuestionsFor(isAgriScores(scores));
   const answered = Object.values(scores).filter(isAnswered).length;
-  document.getElementById('progressFill').style.width = `${(answered/TOTAL_QUESTIONS*100).toFixed(1)}%`;
-  document.getElementById('progressLabel').textContent = `${answered} of ${TOTAL_QUESTIONS} items scored`;
+  document.getElementById('progressFill').style.width = `${(answered/total*100).toFixed(1)}%`;
+  document.getElementById('progressLabel').textContent = `${answered} of ${total} items scored`;
 
   // gauges
   const gaugeArea = document.getElementById('gaugeArea');
@@ -2568,7 +2728,9 @@ async function loadBaselineAII(beneficiary){
 }
 
 function pctFromScores(scoreObj, key){
-  const codes = indexCodes(key);
+  // Saved records carry the gate alongside their scores, so the same rule
+  // applies to history as to the live form.
+  const codes = renderedCodes(key, isAgriScores(scoreObj));
   const vals = codes.map(c => scoreObj[c]).filter(isScored);
   if(vals.length === 0) return null;
   const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
@@ -2600,6 +2762,16 @@ async function switchContext(){
 
   const rec = await loadAssessment(currentBeneficiary, currentPeriod);
   scores = rec ? {...rec.scores} : {};
+
+  // Pre-fill the agriculture gate from the intake industry, so an assessor
+  // only has to touch it when intake is wrong or missing. An answer already
+  // saved against this period always wins — the assessor's judgement is not
+  // overwritten by intake on reload.
+  agriIntakeHint = await agriHintFromIntake(currentBeneficiary);
+  if(!scores[AGRI_GATE_KEY] && agriIntakeHint !== null){
+    scores[AGRI_GATE_KEY] = agriIntakeHint ? 'Yes' : 'No';
+  }
+  buildQuestionArea();
   refreshAllScaleUI();
   baselineAIICache = currentPeriod === 'Baseline' ? null : await loadBaselineAII(currentBeneficiary);
   recompute();
@@ -4470,7 +4642,7 @@ const ENTERPRISE_SURVEY_LIBRARY = {
       ["BHI_MGT3", "I proactively manage business risks."],
       ["BHI_MGT4", "I maintain strong relationships with my customers."],
       ["BHI_MGT5", "My business systems are well organised and support future growth."],
-      ["BHI_ENV1", "Reducing unnecessary waste is part of how my business operates day to day."],
+      ["BHI_ENV1", "My business avoids unnecessary waste as part of its day-to-day operations."],
       ["BHI_ENV2", "My business uses water, electricity, fuel or materials efficiently, where applicable."],
     ],
     SRI: [
@@ -4867,11 +5039,78 @@ async function saveDemographic(){
   }catch(e){ console.error(e); showToast('Could not save — please try again'); }
 }
 
+// First-person agriculture items for the beneficiary self-assessment, in the
+// same per-period voice as the rest of that survey. The substitution map is
+// identical to the assessor questionnaire's, so a farmer answers the farming
+// version of each concept and never both.
+const AGRI_SURVEY = {
+  Baseline: {
+    ERI: { replace: { ERI_ENV2: ["ERI_AGR2","I can identify ways to improve water efficiency, soil management or responsible input use within my agricultural activities."] },
+           extra: [["ERI_AGR1","I understand sustainable agricultural practices relevant to my farming or agricultural business."]] },
+    BHI: { replace: { BHI_ENV2: ["BHI_AGR1","My agricultural business implements appropriate practices to prevent unnecessary water use, soil degradation or resource wastage."],
+                      BHI_ENV1: ["BHI_AGR2","My agricultural business takes practical steps to manage agricultural waste, including reuse, recycling or composting where appropriate."] }, extra: [] },
+    SRI: { replace: { SRI_ENV4: ["SRI_AGR1","My agricultural business has considered environmental threats such as drought, changing weather conditions, water shortages or declining soil quality."],
+                      SRI_ENV5: ["SRI_AGR2","My agricultural business has measures in place to maintain or adapt production when environmental conditions change."] }, extra: [] },
+  },
+  Q1: {
+    ERI: { replace: { ERI_ENV2: ["ERI_AGR2","I am better able to identify ways to improve water efficiency, soil management or responsible input use."] },
+           extra: [["ERI_AGR1","My understanding of sustainable agricultural practices has improved."]] },
+    BHI: { replace: { BHI_ENV2: ["BHI_AGR1","My agricultural business has reduced unnecessary water use, soil degradation and resource wastage."],
+                      BHI_ENV1: ["BHI_AGR2","My agricultural business has improved the way it manages agricultural waste."] }, extra: [] },
+    SRI: { replace: { SRI_ENV4: ["SRI_AGR1","I am better able to recognise environmental threats such as drought, changing weather or declining soil quality."],
+                      SRI_ENV5: ["SRI_AGR2","I have begun putting measures in place to keep production going when conditions change."] }, extra: [] },
+  },
+  Q2: {
+    ERI: { replace: { ERI_ENV2: ["ERI_AGR2","I actively identify ways to improve water efficiency, soil management or responsible input use."] },
+           extra: [["ERI_AGR1","I apply sustainable agricultural practices in my farming activities."]] },
+    BHI: { replace: { BHI_ENV2: ["BHI_AGR1","My agricultural business actively prevents unnecessary water use, soil degradation and resource wastage."],
+                      BHI_ENV1: ["BHI_AGR2","My agricultural business reuses, recycles or composts agricultural waste where appropriate."] }, extra: [] },
+    SRI: { replace: { SRI_ENV4: ["SRI_AGR1","I actively monitor environmental threats such as drought, changing weather or declining soil quality."],
+                      SRI_ENV5: ["SRI_AGR2","My measures for keeping production going through changing conditions are becoming established."] }, extra: [] },
+  },
+  Q3: {
+    ERI: { replace: { ERI_ENV2: ["ERI_AGR2","I regularly find and apply ways to improve water efficiency, soil management and input use."] },
+           extra: [["ERI_AGR1","I farm using sustainable agricultural practices."]] },
+    BHI: { replace: { BHI_ENV2: ["BHI_AGR1","My agricultural business routinely prevents unnecessary water use and soil degradation."],
+                      BHI_ENV1: ["BHI_AGR2","My agricultural business routinely reuses, recycles or composts agricultural waste."] }, extra: [] },
+    SRI: { replace: { SRI_ENV4: ["SRI_AGR1","I proactively track environmental threats to my agricultural production."],
+                      SRI_ENV5: ["SRI_AGR2","My agricultural business has working measures to maintain production when conditions change."] }, extra: [] },
+  },
+  Q4: {
+    ERI: { replace: { ERI_ENV2: ["ERI_AGR2","I have the knowledge needed to manage water, soil and inputs responsibly."] },
+           extra: [["ERI_AGR1","I understand the sustainable agricultural practices my business depends on."]] },
+    BHI: { replace: { BHI_ENV2: ["BHI_AGR1","My agricultural business consistently avoids unnecessary water use, soil degradation and resource wastage."],
+                      BHI_ENV1: ["BHI_AGR2","My agricultural business manages agricultural waste responsibly."] }, extra: [] },
+    SRI: { replace: { SRI_ENV4: ["SRI_AGR1","I can identify the environmental threats that affect my agricultural production."],
+                      SRI_ENV5: ["SRI_AGR2","My agricultural business has lasting measures to maintain production when environmental conditions change."] }, extra: [] },
+  },
+};
+
+// The survey items actually shown for a period, given the gate.
+function enterpriseItems(period, idx, agri){
+  const base = (ENTERPRISE_SURVEY_LIBRARY[period] || {})[idx] || [];
+  if(!agri) return base;
+  const spec = ((AGRI_SURVEY[period] || {})[idx]) || { replace:{}, extra:[] };
+  const swapped = base.map(q => spec.replace[q[0]] || q);
+  return swapped.concat(spec.extra);
+}
+
 function buildEnterpriseSurveyArea(period){
-  const lib = ENTERPRISE_SURVEY_LIBRARY[period];
   const area = document.getElementById('enterpriseSurveyArea');
-  area.innerHTML = ['ERI','BHI','SRI'].map(idx => {
-    const items = lib[idx] || [];
+  const agri = isAgriScores(enterpriseSurveyScores);
+  const gateHtml = `
+    <div class="index-block agri-gate">
+      <div class="agri-gate-body">
+        <div class="agri-gate-q">${AGRI_GATE_LABEL.replace('this enterprise','your enterprise')}</div>
+        <div class="agri-gate-opts">
+          <button type="button" data-agri="Yes" class="${agri?'sel':''}">Yes — agriculture-related enterprise</button>
+          <button type="button" data-agri="No" class="${enterpriseSurveyScores[AGRI_GATE_KEY]==='No'?'sel':''}">No — other business sector</button>
+        </div>
+        <div class="agri-gate-note">If you answer No, the farming questions are skipped and your environmental performance is assessed through the general questions.</div>
+      </div>
+    </div>`;
+  area.innerHTML = gateHtml + ['ERI','BHI','SRI'].map(idx => {
+    const items = enterpriseItems(period, idx, agri);
     const label = idx === 'ERI' ? 'Entrepreneur Readiness Index' : idx === 'BHI' ? 'Business Health Index' : 'Sustainability & Resilience Index';
     return `
       <div class="index-block">
@@ -4898,11 +5137,28 @@ function buildEnterpriseSurveyArea(period){
     `;
   }).join('');
 
+  area.querySelectorAll('[data-agri]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const value = btn.getAttribute('data-agri');
+      if(enterpriseSurveyScores[AGRI_GATE_KEY] === value) return;
+      enterpriseSurveyScores[AGRI_GATE_KEY] = value;
+      // Anything no longer asked must stop counting, or a beneficiary who
+      // changed their answer would carry both versions.
+      const keep = new Set(['ERI','BHI','SRI']
+        .flatMap(i => enterpriseItems(period, i, value === 'Yes').map(([c]) => c)));
+      Object.keys(enterpriseSurveyScores).forEach(c => {
+        if(c !== AGRI_GATE_KEY && !keep.has(c)) delete enterpriseSurveyScores[c];
+      });
+      enterpriseMissing = new Set();
+      buildEnterpriseSurveyArea(period);
+    });
+  });
+
   area.querySelectorAll('.scale button').forEach(btn => {
     btn.addEventListener('click', () => {
       const code = btn.parentElement.getAttribute('data-code');
       const raw = btn.getAttribute('data-val');
-      if(raw === 'NA' && !questionAllowsNA(enterpriseQuestionText(period, code))) return;
+      if(raw === 'NA' && !questionAllowsNA(enterpriseQuestionText(period, code, isAgriScores(enterpriseSurveyScores)))) return;
       const val = raw === 'NA' ? NA_SCORE : parseInt(raw, 10);
       enterpriseSurveyScores[code] = (enterpriseSurveyScores[code] === val) ? undefined : val;
       enterpriseMissing.delete(code);
@@ -4913,13 +5169,25 @@ function buildEnterpriseSurveyArea(period){
 
 // The guard above needs the item's wording to decide whether N/A is allowed,
 // and the survey's wording changes from period to period.
-function enterpriseQuestionText(period, code){
-  const lib = ENTERPRISE_SURVEY_LIBRARY[period] || {};
+function enterpriseQuestionText(period, code, agri){
   for(const idx of ['ERI','BHI','SRI']){
-    const hit = (lib[idx] || []).find(([c]) => c === code);
+    const hit = enterpriseItems(period, idx, !!agri).find(([c]) => c === code);
     if(hit) return hit[1];
   }
   return '';
+}
+
+// "Agriculture, Farming & Agri-Processing" is one of the intake industry
+// options, so intake usually already knows. Returns null when there is no
+// intake on record, which is why the gate still has to be answerable by hand.
+async function agriHintFromIntake(beneficiary){
+  if(!beneficiary) return null;
+  try{
+    const { data } = await db.from('enterprise_demographics')
+      .select('industry').eq('beneficiary', beneficiary).maybeSingle();
+    if(!data || !data.industry) return null;
+    return /agricultur|farming|agri-process/i.test(data.industry);
+  }catch(e){ return null; }
 }
 
 async function loadEnterpriseSurvey(beneficiary, period){
@@ -4936,8 +5204,22 @@ async function saveEnterpriseSurvey(){
   const period = document.getElementById('entPeriodSelect').value;
   if(!beneficiary){ showToast('Select a beneficiary first'); return; }
   if(currentUserRole && currentUserRole.role === 'beneficiary'){
-    const lib = ENTERPRISE_SURVEY_LIBRARY[period] || {};
-    const allCodes = ['ERI','BHI','SRI'].flatMap(idx => (lib[idx] || []).map(([code]) => code));
+    // The gate decides which questions they were asked, so it has to be
+    // answered before the rest means anything.
+    if(!enterpriseSurveyScores[AGRI_GATE_KEY]){
+      const g = document.querySelector('#enterpriseSurveyArea .agri-gate');
+      if(g){
+        g.style.outline = '2px solid var(--red, #c0392b)';
+        g.style.outlineOffset = '3px';
+        g.style.borderRadius = '6px';
+        g.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+      showToast('Please answer the question about agricultural activity first');
+      return;
+    }
+    const agriNow = isAgriScores(enterpriseSurveyScores);
+    const allCodes = ['ERI','BHI','SRI']
+      .flatMap(idx => enterpriseItems(period, idx, agriNow).map(([code]) => code));
     const missing = allCodes.filter(c => !enterpriseSurveyScores[c]);
     enterpriseMissing = new Set(missing);
     document.querySelectorAll('#enterpriseSurveyArea .q-row').forEach(r => r.style.outline = '');
