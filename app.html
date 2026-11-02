@@ -7145,11 +7145,21 @@ async function downloadReportPdf(){
   //
   // So: an off-screen WRAPPER holds the positioning, and the element passed
   // to html2pdf is a plain in-flow div inside it, which does have a height.
+  // The capture box has to be exactly as wide as the printable area of the
+  // page, in CSS pixels. html2pdf lays the content out at the page's inner
+  // width and then maps that to the page; a box pinned wider than that (it
+  // used to be a flat 760px) silently hangs over the right-hand edge and the
+  // ends of lines are cropped off. Deriving it from the page and the margins
+  // keeps the two in step, and keeps the left and right margins equal.
+  const PAGE_W_PT = 595.28;                       // A4 portrait
+  const MARGIN_PT = [46, 24, 34, 24];             // top, left, bottom, right
+  const BOX_W_PX = Math.floor((PAGE_W_PT - MARGIN_PT[1] - MARGIN_PT[3]) * 96 / 72);
+
   const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:absolute; left:-10000px; top:0; width:760px; background:#fff;';
+  wrapper.style.cssText = `position:absolute; left:-10000px; top:0; width:${BOX_W_PX}px; background:#fff;`;
   const container = document.createElement('div');
   container.className = 'cimp-pdf-scope';
-  container.style.cssText = 'width:760px; background:#fff;';
+  container.style.cssText = `width:${BOX_W_PX}px; background:#fff;`;
   // The report stylesheet is written for a standalone document, so its rules
   // start with `body`. Injected into the live page it restyled the real body,
   // which flickered the admin's screen and threw the capture off centre.
@@ -7160,7 +7170,20 @@ async function downloadReportPdf(){
   // they are overridden back to a plain, full-width block.
   container.innerHTML =
     `<style>${scopeCssToSelector(REPORT_PRINT_CSS, '.cimp-pdf-scope')}
-     .cimp-pdf-scope{margin:0 !important; max-width:none !important; width:760px; padding:28px !important; box-sizing:border-box;}</style>`
+     .cimp-pdf-scope{margin:0 !important; max-width:none !important; width:${BOX_W_PX}px; padding:24px !important; box-sizing:border-box;
+       overflow-wrap:break-word; word-wrap:break-word;}
+     .cimp-pdf-scope table{table-layout:auto; width:100%; max-width:100%;}
+     .cimp-pdf-scope td, .cimp-pdf-scope th{overflow-wrap:break-word; word-wrap:break-word;}
+     /* Keep rows and headings whole, but let long tables flow across pages
+        instead of being pushed down entire and leaving half a page blank. */
+     /* A paragraph moves whole rather than being sliced through the middle
+        of a line, which is what happens if nothing claims it. Table rows do
+        the same, but the table itself may still flow across pages. */
+     .cimp-pdf-scope p, .cimp-pdf-scope li{page-break-inside:avoid;}
+     .cimp-pdf-scope tr{page-break-inside:avoid;}
+     .cimp-pdf-scope h2, .cimp-pdf-scope h3{page-break-after:avoid;}
+     .cimp-pdf-scope thead{display:table-header-group;}
+     .cimp-pdf-scope .rp-dash, .cimp-pdf-scope .rp-callout{page-break-inside:avoid;}</style>`
     + buildReportBodyHtml(name, assessor, data);
   wrapper.appendChild(container);
   document.body.appendChild(wrapper);
@@ -7188,12 +7211,12 @@ async function downloadReportPdf(){
     const worker = html2pdf().set({
       // Top margin leaves room for the stamped running header, bottom for the
       // page number. [top, left, bottom, right]
-      margin: [46, 24, 34, 24],
+      margin: MARGIN_PT,
       filename: reportExportFilename(name, 'pdf'),
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
       jsPDF: { unit: 'pt', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      pagebreak: { mode: ['css', 'legacy'] },
     }).from(container).toPdf();
 
     await worker.get('pdf').then(pdf => {
