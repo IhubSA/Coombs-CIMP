@@ -1881,13 +1881,34 @@ async function enterBeneficiaryMode(name, opts){
     return;
   }
 
+  // A beneficiary signing in never loads the full beneficiary list, so
+  // beneficiaryMeta would be empty and cohortOf()/programmeOf() would fall back
+  // to 'Unknown' — which now writes a survey into a cohort that does not exist.
+  // Read this person's own row first (RLS allows it) and seed the meta from it.
+  let b = null;
+  try{
+    const r = await db.from('beneficiaries').select('programme,cohort').eq('name', name).maybeSingle();
+    b = r.data || null;
+  }catch(e){ console.error('Failed to load beneficiary record', e); }
+  if(b && (b.programme || b.cohort)){
+    beneficiaryMeta[name] = Object.assign({}, beneficiaryMeta[name], {
+      programme: b.programme, cohort: b.cohort,
+    });
+  }
+
   const periods = ['Baseline','Q1','Q2','Q3','Q4'];
   // Baseline opens straight after registration. Q1 opens 14 days after
   // Baseline is completed; Q2, Q3 and Q4 each open 90 days after the previous one.
   const WAIT_DAYS = { Q1: 14, Q2: 90, Q3: 90, Q4: 90 };
   let nextPeriod = null, prevSavedAt = null;
   for(const p of periods){
-    const { data } = await db.from('enterprise_survey_responses').select('id,saved_at').eq('beneficiary', name).eq('period', p).maybeSingle();
+    // Scope to the cohort: the same person can hold a Baseline in Year 1 and
+    // another in Year 2, and an unscoped maybeSingle() errors on two rows,
+    // which used to read as "not done yet" and sent them round again.
+    let q = db.from('enterprise_survey_responses').select('id,saved_at')
+              .eq('beneficiary', name).eq('period', p);
+    if(b && b.cohort) q = q.eq('cohort', b.cohort);
+    const { data } = await q.order('saved_at', { ascending: false }).limit(1).maybeSingle();
     if(!data){ nextPeriod = p; break; }
     prevSavedAt = data.saved_at;
   }
@@ -1896,7 +1917,6 @@ async function enterBeneficiaryMode(name, opts){
   // overrides the "days after the previous survey" rule.
   let fixedDates = {};
   try{
-    const { data: b } = await db.from('beneficiaries').select('programme,cohort').eq('name', name).maybeSingle();
     if(b && b.programme && b.cohort){
       const { data: cs } = await db.from('cohort_settings').select('q1_open_date,q2_open_date,q3_open_date,q4_open_date').eq('programme', b.programme).eq('cohort', b.cohort).maybeSingle();
       if(cs) fixedDates = cs;
@@ -2662,10 +2682,18 @@ function populateBeneficiarySelect(list){
   sel.innerHTML = list.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(benLabel(n))}</option>`).join('');
 }
 
-async function loadAssessment(beneficiary, period){
+// A programme runs over more than one year and the same person is assessed
+// again in each, so every record belongs to an enrolment, not just to a
+// person. Where a caller does not say which enrolment it means, the
+// beneficiary's current one is used — that is what capturing new data wants.
+function cohortOf(name){ const m = beneficiaryMeta[name]; return (m && m.cohort) || 'Unknown'; }
+function programmeOf(name){ const m = beneficiaryMeta[name]; return (m && m.programme) || 'Unknown'; }
+
+async function loadAssessment(beneficiary, period, cohort){
   try{
     const { data, error } = await db.from('assessments').select('*')
-      .eq('beneficiary', beneficiary).eq('period', period).maybeSingle();
+      .eq('beneficiary', beneficiary).eq('period', period)
+      .eq('cohort', cohort || cohortOf(beneficiary)).maybeSingle();
     if(error) throw error;
     if(!data) return null;
     return {
@@ -2684,7 +2712,7 @@ async function upsertAssessment(record){
     computed_pct: record.computedPct || null, seeded: !!record.seeded,
     saved_at: record.savedAt || new Date().toISOString(),
   };
-  const { error } = await db.from('assessments').upsert(row, { onConflict: 'beneficiary,period' });
+  const { error } = await db.from('assessments').upsert(row, { onConflict: 'beneficiary,cohort,period' });
   if(error) throw error;
 }
 
@@ -3140,12 +3168,20 @@ async function saveCohortMap(map){
 // assessments, so allocation doesn't rely on retyping them.
 async function discoverKnownCohorts(){
   const combos = new Map(); // key -> {programme, cohort}
+  // Every table that carries an enrolment, not just the admin diagnostic —
+  // a cohort assessed only through the self-service survey, or imported as
+  // history, must still appear in the selector.
   try{
-    const { data, error } = await db.from('assessments').select('programme,cohort');
-    if(error) throw error;
-    (data || []).forEach(row => {
-      if(row.programme && row.cohort) combos.set(cohortMapKey(row.programme, row.cohort), { programme: row.programme, cohort: row.cohort });
-    });
+    const [a, s, p] = await Promise.all([
+      db.from('assessments').select('programme,cohort'),
+      db.from('enterprise_survey_responses').select('programme,cohort'),
+      db.from('peii_entries').select('programme,cohort'),
+    ]);
+    [a, s, p].forEach(r => (r.data || []).forEach(row => {
+      if(row.programme && row.cohort && row.cohort !== 'Unknown'){
+        combos.set(cohortMapKey(row.programme, row.cohort), { programme: row.programme, cohort: row.cohort });
+      }
+    }));
   }catch(e){ console.error('Failed to discover known cohorts', e); }
   return combos;
 }
@@ -5183,17 +5219,21 @@ function enterpriseQuestionText(period, code, agri){
 async function agriHintFromIntake(beneficiary){
   if(!beneficiary) return null;
   try{
+    // Intake answers all live inside the `data` jsonb column — there is no
+    // `industry` column to select, and asking for one is a 400.
     const { data } = await db.from('enterprise_demographics')
-      .select('industry').eq('beneficiary', beneficiary).maybeSingle();
-    if(!data || !data.industry) return null;
-    return /agricultur|farming|agri-process/i.test(data.industry);
+      .select('data').eq('beneficiary', beneficiary).maybeSingle();
+    const industry = data && data.data && data.data.industry;
+    if(!industry) return null;
+    return /agricultur|farming|agri-process/i.test(industry);
   }catch(e){ return null; }
 }
 
-async function loadEnterpriseSurvey(beneficiary, period){
+async function loadEnterpriseSurvey(beneficiary, period, cohort){
   try{
     const { data, error } = await db.from('enterprise_survey_responses').select('*')
-      .eq('beneficiary', beneficiary).eq('period', period).maybeSingle();
+      .eq('beneficiary', beneficiary).eq('period', period)
+      .eq('cohort', cohort || cohortOf(beneficiary)).maybeSingle();
     if(error) throw error;
     return data ? { scores: data.scores || {}, savedAt: data.saved_at } : null;
   }catch(e){ console.error('Failed to load enterprise survey', e); return null; }
@@ -5236,8 +5276,20 @@ async function saveEnterpriseSurvey(){
     }
   }
   try{
-    const row = { beneficiary, period, scores: enterpriseSurveyScores, saved_at: new Date().toISOString() };
-    const { error } = await db.from('enterprise_survey_responses').upsert(row, { onConflict: 'beneficiary,period' });
+    // Writing 'Unknown' would save successfully and then vanish from every
+    // report, which is worse than refusing — the answers would be lost
+    // without anyone noticing. Stop instead and say so.
+    const programme = programmeOf(beneficiary), cohort = cohortOf(beneficiary);
+    if(programme === 'Unknown' || cohort === 'Unknown'){
+      console.error('Refusing to save: no programme/cohort on record for', beneficiary);
+      showToast('Could not save — this profile has no programme or cohort set. Please tell your programme administrator.');
+      return;
+    }
+    const row = { beneficiary, period, scores: enterpriseSurveyScores,
+                  programme, cohort,
+                  saved_at: new Date().toISOString() };
+    const { error } = await db.from('enterprise_survey_responses')
+      .upsert(row, { onConflict: 'beneficiary,cohort,period' });
     if(error) throw error;
     showToast(`Saved ${period} survey — ${beneficiary}`);
     document.getElementById('entSurveySavedNote').textContent = `Last saved ${new Date(row.saved_at).toLocaleString()}`;
@@ -5751,10 +5803,11 @@ async function renderProfile(){
 
 /* ============================ PEII CAPTURE ============================ */
 
-async function loadPEII(beneficiary, quarter){
+async function loadPEII(beneficiary, quarter, cohort){
   try{
     const { data, error } = await db.from('peii_entries').select('*')
-      .eq('beneficiary', beneficiary).eq('quarter', quarter).maybeSingle();
+      .eq('beneficiary', beneficiary).eq('quarter', quarter)
+      .eq('cohort', cohort || cohortOf(beneficiary)).maybeSingle();
     if(error) throw error;
     if(!data) return null;
     return {
@@ -5771,8 +5824,10 @@ async function upsertPEII(record){
     beneficiary: record.beneficiary, quarter: record.quarter, dims: record.dims || {},
     feedback: record.feedback || null, computed_pct: record.computedPct !== undefined ? record.computedPct : null,
     seeded: !!record.seeded, saved_at: record.savedAt || new Date().toISOString(),
+    programme: record.programme || programmeOf(record.beneficiary),
+    cohort: record.cohort || cohortOf(record.beneficiary),
   };
-  const { error } = await db.from('peii_entries').upsert(row, { onConflict: 'beneficiary,quarter' });
+  const { error } = await db.from('peii_entries').upsert(row, { onConflict: 'beneficiary,cohort,quarter' });
   if(error) throw error;
 }
 
@@ -5968,13 +6023,36 @@ async function populateCohortSelect(){
 // This fetches the whole cohort in four queries and assembles the same
 // per-beneficiary objects in memory. The "admin record wins over the
 // self-reported one" rule is preserved exactly as loadAssessmentUnified had it.
-async function gatherCohortMemberData(members){
+// Everyone with a record against this enrolment, plus anyone currently
+// enrolled in it who has not been assessed yet, so a new cohort is not empty.
+async function cohortMembers(programme, cohort){
+  const names = new Set();
+  try{
+    const [a, s, p] = await Promise.all([
+      db.from('assessments').select('beneficiary').eq('programme', programme).eq('cohort', cohort),
+      db.from('enterprise_survey_responses').select('beneficiary').eq('programme', programme).eq('cohort', cohort),
+      db.from('peii_entries').select('beneficiary').eq('programme', programme).eq('cohort', cohort),
+    ]);
+    [a, s, p].forEach(r => (r.data || []).forEach(x => names.add(x.beneficiary)));
+  }catch(e){ console.error('Could not resolve cohort members', e); }
+  Object.entries(beneficiaryMeta).forEach(([n, m]) => {
+    if(m.programme === programme && m.cohort === cohort) names.add(n);
+  });
+  return [...names].filter(n => !checkNames.has(n)).sort();
+}
+
+async function gatherCohortMemberData(members, cohort){
   if(!members.length) return [];
 
+  // Scoped to the enrolment. The same person appears in more than one
+  // programme year, so without this a Year 1 report would average Year 2
+  // answers in with the Year 1 ones. Demographics are per person, not per
+  // enrolment, so they are not filtered.
+  const scoped = (q) => cohort ? q.eq('cohort', cohort) : q;
   const [assessments, surveys, peii, demos] = await Promise.all([
-    db.from('assessments').select('*').in('beneficiary', members),
-    db.from('enterprise_survey_responses').select('*').in('beneficiary', members),
-    db.from('peii_entries').select('*').in('beneficiary', members),
+    scoped(db.from('assessments').select('*').in('beneficiary', members)),
+    scoped(db.from('enterprise_survey_responses').select('*').in('beneficiary', members)),
+    scoped(db.from('peii_entries').select('*').in('beneficiary', members)),
     db.from('enterprise_demographics').select('*').in('beneficiary', members),
   ]);
   for(const r of [assessments, surveys, peii, demos]){
@@ -6043,11 +6121,12 @@ async function gatherCohortMemberData(members){
 async function gatherCohortData(key){
   const { programme, cohort } = splitCohortKey(key);
   await loadBeneficiaryList();
-  const members = Object.keys(beneficiaryMeta).filter(n => {
-    const m = beneficiaryMeta[n];
-    return m.programme === programme && m.cohort === cohort && !checkNames.has(n);
-  });
-  const perBen = await gatherCohortMemberData(members);
+  // Who was in this cohort is decided by who has data against it, not by the
+  // single cohort field on the beneficiary record. That field only ever holds
+  // a person's CURRENT enrolment, so on its own it would make every past
+  // cohort look empty once people moved on to the next year.
+  const members = await cohortMembers(programme, cohort);
+  const perBen = await gatherCohortMemberData(members, cohort);
 
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
   const periods = PERIOD_ORDER.map(p => {
